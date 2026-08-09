@@ -11,3 +11,15 @@ export const createVehicleSchema = Joi.object({
   category: Joi.string().trim().max(50).required(),
   daily_rate: Joi.number().precision(2).positive().required(),
 });
+
+export const updateVehicleSchema = Joi.object({
+  name: Joi.string().trim().max(100).optional(),
+  plate_number: Joi.string()
+    .trim()
+    .uppercase()
+    .pattern(/^[A-Z0-9-]+$/)
+    .max(20)
+    .optional(),
+  category: Joi.string().trim().max(50).optional(),
+  daily_rate: Joi.number().precision(2).positive().optional(),
+});

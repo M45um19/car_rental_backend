@@ -305,42 +305,52 @@
                       "example": "Vehicles list fetched successfully"
                     },
                     "data": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "integer",
-                            "example": 1
-                          },
-                          "name": {
-                            "type": "string",
-                            "example": "Tesla Model S"
-                          },
-                          "plate_number": {
-                            "type": "string",
-                            "example": "XYZ-789"
-                          },
-                          "category": {
-                            "type": "string",
-                            "example": "Sedan"
-                          },
-                          "daily_rate": {
-                            "type": "number",
-                            "example": 120.00
-                          },
-                          "photo_path": {
-                            "type": "string",
-                            "example": "uploads/1700000000000-photo.jpg"
-                          },
-                          "created_at": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "updated_at": {
-                            "type": "string",
-                            "format": "date-time"
+                      "type": "object",
+                      "properties": {
+                        "vehicles": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "example": 1
+                              },
+                              "name": {
+                                "type": "string",
+                                "example": "Tesla Model S"
+                              },
+                              "plate_number": {
+                                "type": "string",
+                                "example": "XYZ-789"
+                              },
+                              "category": {
+                                "type": "string",
+                                "example": "Sedan"
+                              },
+                              "daily_rate": {
+                                "type": "number",
+                                "example": 120.00
+                              },
+                              "photo_path": {
+                                "type": "string",
+                                "example": "https://res.cloudinary.com/demo/image/upload/sample.jpg"
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "updated_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
                           }
+                        },
+                        "nextCursor": {
+                          "type": "integer",
+                          "nullable": true,
+                          "example": 2
                         }
                       }
                     }
@@ -430,6 +440,117 @@
           },
           "400": {
             "description": "Invalid vehicle ID parameter"
+          },
+          "404": {
+            "description": "Vehicle not found"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update an existing vehicle",
+        "description": "Update vehicle fields and optionally upload a new photo to Cloudinary. Updates PostgreSQL, Redis, and OpenSearch.",
+        "tags": [
+          "Vehicles"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Vehicle ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Tesla Model S Plaid"
+                  },
+                  "plate_number": {
+                    "type": "string",
+                    "example": "XYZ-789"
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Sedan"
+                  },
+                  "daily_rate": {
+                    "type": "number",
+                    "format": "float",
+                    "example": 150.00
+                  },
+                  "photo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Optional updated vehicle image file"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vehicle updated successfully"
+          },
+          "400": {
+            "description": "Validation error or invalid ID parameter"
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid token"
+          },
+          "404": {
+            "description": "Vehicle not found"
+          },
+          "409": {
+            "description": "Conflict - Plate number already exists"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Soft delete a vehicle",
+        "description": "Soft deletes vehicle from DB, purges Redis caches, and removes document from OpenSearch index.",
+        "tags": [
+          "Vehicles"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Vehicle ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vehicle deleted successfully"
+          },
+          "400": {
+            "description": "Invalid vehicle ID parameter"
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid token"
           },
           "404": {
             "description": "Vehicle not found"

@@ -33,6 +33,18 @@ services:
       timeout: 5s
       retries: 5
 
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: rental_redisinsight
+    restart: always
+    ports:
+      - "5540:5540"
+    volumes:
+      - redisinsightdata:/db
+    depends_on:
+      redis:
+        condition: service_healthy
+
   opensearch:
     image: opensearchproject/opensearch:2.11.0
     container_name: rental_opensearch
@@ -101,26 +113,26 @@ services:
       - .:/usr/src/app
       - /usr/src/app/node_modules
     environment:
-      PORT: 3000
-      NODE_ENV: development
-      JWT_ACCESS_SECRET: your_access_token_secret_key
-      JWT_REFRESH_SECRET: your_refresh_token_secret_key
-      UPLOAD_PATH: uploads/
+      PORT: ${PORT:-3000}
+      NODE_ENV: ${NODE_ENV:-development}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      UPLOAD_PATH: ${UPLOAD_PATH:-uploads/}
       DB_HOST: db
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: vehicle_rental_db
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-vehicle_rental_db}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       OPENSEARCH_NODE: http://opensearch:9200
-      KAFKA_CLIENT_ID: rental-service
+      KAFKA_CLIENT_ID: ${KAFKA_CLIENT_ID:-rental-service}
       KAFKA_BROKERS: kafka:9092
-      KAFKA_TOPIC: rental-events
-      KAFKA_GROUP_ID: rental-group
-      CLOUDINARY_CLOUD_NAME: dgf4rwvys
-      CLOUDINARY_API_KEY: 535587242182258
-      CLOUDINARY_API_SECRET: tEiqrZRYy9ODy_WeVrXOjdTxgjU
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-rental-events}
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-rental-group}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
     depends_on:
       db:
         condition: service_healthy
@@ -142,26 +154,26 @@ services:
       - .:/usr/src/app
       - /usr/src/app/node_modules
     environment:
-      PORT: 3000
-      NODE_ENV: development
-      JWT_ACCESS_SECRET: your_access_token_secret_key
-      JWT_REFRESH_SECRET: your_refresh_token_secret_key
-      UPLOAD_PATH: uploads/
+      PORT: ${PORT:-3000}
+      NODE_ENV: ${NODE_ENV:-development}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      UPLOAD_PATH: ${UPLOAD_PATH:-uploads/}
       DB_HOST: db
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: vehicle_rental_db
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-vehicle_rental_db}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       OPENSEARCH_NODE: http://opensearch:9200
-      KAFKA_CLIENT_ID: rental-service
+      KAFKA_CLIENT_ID: ${KAFKA_CLIENT_ID:-rental-service}
       KAFKA_BROKERS: kafka:9092
-      KAFKA_TOPIC: rental-events
-      KAFKA_GROUP_ID: rental-group
-      CLOUDINARY_CLOUD_NAME: dgf4rwvys
-      CLOUDINARY_API_KEY: 535587242182258
-      CLOUDINARY_API_SECRET: tEiqrZRYy9ODy_WeVrXOjdTxgjU
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-rental-events}
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-rental-group}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
     depends_on:
       db:
         condition: service_healthy
@@ -172,4 +184,5 @@ services:
 volumes:
   pgdata:
   redisdata:
+  redisinsightdata:
   opensearchdata:
