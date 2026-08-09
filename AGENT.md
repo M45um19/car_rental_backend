@@ -31,12 +31,12 @@ You are tasked with building an enterprise-grade, highly scalable, and modular R
   * **Key Pattern:** `session:staff:{userId}:{deviceId}`
   * **Function:** Caches active session payloads `{ deviceId, ip, deviceName, staff: { id, email, name } }` with a 7-day TTL (matching the Refresh Token expiry) to support concurrent multi-device logins and verify session state.
 
-* **Vehicle List Cache (Cursor Pagination)**
-  * **Key Pattern:** `redis:vehicles:list`
+* **Vehicle List Cache (Pagination)**
+  * **Key Pattern:** `vehicles:list`
   * **Function:** Stores an ordered cache of up to 1,000 vehicle IDs (integer IDs) using cursor pagination to handle high-read requests efficiently.
 
 * **Vehicle Details Cache**
-  * **Key Pattern:** `redis:vehicle:{id}`
+  * **Key Pattern:** `vehicle:{id}`
   * **Function:** Caches individual vehicle detail objects as JSON for instant lookups without hitting the database.
 
 ## 2. OpenSearch Strategy (Search & Filtering)

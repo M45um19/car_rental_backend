@@ -25,6 +25,9 @@ const envSchema = Joi.object({
   KAFKA_BROKERS: Joi.string().required(),
   KAFKA_TOPIC: Joi.string().default('rental-events'),
   KAFKA_GROUP_ID: Joi.string().default('rental-group'),
+  CLOUDINARY_CLOUD_NAME: Joi.string().required(),
+  CLOUDINARY_API_KEY: Joi.string().required(),
+  CLOUDINARY_API_SECRET: Joi.string().required(),
 }).unknown().required();
 
 const { error, value: envVars } = envSchema.validate(process.env);
@@ -61,5 +64,10 @@ export const env = {
     brokers: (envVars.KAFKA_BROKERS as string).split(','),
     topic: envVars.KAFKA_TOPIC as string,
     groupId: envVars.KAFKA_GROUP_ID as string,
+  },
+  cloudinary: {
+    cloudName: envVars.CLOUDINARY_CLOUD_NAME as string,
+    apiKey: envVars.CLOUDINARY_API_KEY as string,
+    apiSecret: envVars.CLOUDINARY_API_SECRET as string,
   },
 };

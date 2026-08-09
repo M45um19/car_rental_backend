@@ -118,6 +118,9 @@ services:
       KAFKA_BROKERS: kafka:9092
       KAFKA_TOPIC: rental-events
       KAFKA_GROUP_ID: rental-group
+      CLOUDINARY_CLOUD_NAME: dgf4rwvys
+      CLOUDINARY_API_KEY: 535587242182258
+      CLOUDINARY_API_SECRET: tEiqrZRYy9ODy_WeVrXOjdTxgjU
     depends_on:
       db:
         condition: service_healthy
@@ -156,6 +159,9 @@ services:
       KAFKA_BROKERS: kafka:9092
       KAFKA_TOPIC: rental-events
       KAFKA_GROUP_ID: rental-group
+      CLOUDINARY_CLOUD_NAME: dgf4rwvys
+      CLOUDINARY_API_KEY: 535587242182258
+      CLOUDINARY_API_SECRET: tEiqrZRYy9ODy_WeVrXOjdTxgjU
     depends_on:
       db:
         condition: service_healthy

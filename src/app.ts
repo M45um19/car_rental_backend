@@ -4,6 +4,7 @@ import swaggerUi from 'swagger-ui-express';
 import { container } from './app.container';
 import { errorHandler } from './middleware/error.middleware';
 import swaggerSpec from './config/swagger';
+import { env } from './config/env';
 
 export const createApp = (): Express => {
   const app = express();
@@ -13,11 +14,15 @@ export const createApp = (): Express => {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
+  // Static files for vehicle uploads
+  app.use('/uploads', express.static(env.uploadPath));
+
   // API Documentation Route
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
   // Routes
   app.use('/api/auth', container.authRouter);
+  app.use('/api/vehicles', container.vehiclesRouter);
 
   // Health check route
   app.get('/health', (_req, res) => {
