@@ -121,6 +121,321 @@
           }
         }
       }
+    },
+    "/vehicles": {
+      "post": {
+        "summary": "Create a new vehicle",
+        "description": "Create a new vehicle record in the system fleet, upload its photo, and index it in OpenSearch.",
+        "tags": [
+          "Vehicles"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "plate_number",
+                  "category",
+                  "daily_rate"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Tesla Model S"
+                  },
+                  "plate_number": {
+                    "type": "string",
+                    "example": "XYZ-789"
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Sedan"
+                  },
+                  "daily_rate": {
+                    "type": "number",
+                    "format": "float",
+                    "example": 120.00
+                  },
+                  "photo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Vehicle image file (jpeg, jpg, png, webp)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Vehicle created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Vehicle created successfully"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "example": 1
+                        },
+                        "name": {
+                          "type": "string",
+                          "example": "Tesla Model S"
+                        },
+                        "plate_number": {
+                          "type": "string",
+                          "example": "XYZ-789"
+                        },
+                        "category": {
+                          "type": "string",
+                          "example": "Sedan"
+                        },
+                        "daily_rate": {
+                          "type": "number",
+                          "example": 120.00
+                        },
+                        "photo_path": {
+                          "type": "string",
+                          "example": "uploads/1700000000000-photo.jpg"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or invalid file type"
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid token"
+          },
+          "409": {
+            "description": "Conflict - Plate number already exists"
+          }
+        }
+      },
+      "get": {
+        "summary": "Fetch paginated vehicles list",
+        "description": "Fetch list of active vehicles using cursor pagination. Can filter by category or search by name. Accelerated by Redis and OpenSearch.",
+        "tags": [
+          "Vehicles"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of vehicles to return",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Vehicle ID to start paginating from",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Filter by category name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Search by vehicle name (fuzzy search)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vehicles list fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Vehicles list fetched successfully"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "name": {
+                            "type": "string",
+                            "example": "Tesla Model S"
+                          },
+                          "plate_number": {
+                            "type": "string",
+                            "example": "XYZ-789"
+                          },
+                          "category": {
+                            "type": "string",
+                            "example": "Sedan"
+                          },
+                          "daily_rate": {
+                            "type": "number",
+                            "example": 120.00
+                          },
+                          "photo_path": {
+                            "type": "string",
+                            "example": "uploads/1700000000000-photo.jpg"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vehicles/{id}": {
+      "get": {
+        "summary": "Fetch single vehicle details by ID",
+        "description": "Get detailed vehicle information. Utilizes Redis details cache.",
+        "tags": [
+          "Vehicles"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Vehicle ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vehicle fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Vehicle fetched successfully"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "example": 1
+                        },
+                        "name": {
+                          "type": "string",
+                          "example": "Tesla Model S"
+                        },
+                        "plate_number": {
+                          "type": "string",
+                          "example": "XYZ-789"
+                        },
+                        "category": {
+                          "type": "string",
+                          "example": "Sedan"
+                        },
+                        "daily_rate": {
+                          "type": "number",
+                          "example": 120.00
+                        },
+                        "photo_path": {
+                          "type": "string",
+                          "example": "uploads/1700000000000-photo.jpg"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid vehicle ID parameter"
+          },
+          "404": {
+            "description": "Vehicle not found"
+          }
+        }
+      }
     }
   }
 }
