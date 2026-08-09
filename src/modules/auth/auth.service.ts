@@ -4,14 +4,16 @@ import { AuthRepository } from './auth.repository';
 import { ILoginMetadata, ILoginRequest, ILoginResponse } from './auth.interface';
 import { AppError } from '../../utils/appError';
 import { env } from '../../config/env';
-import { redisClient } from '../../config/redis';
+import { AuthCache } from './auth.cache';
 import { generateUuidV7 } from '../../utils/uuid';
 
 export class AuthService {
   private authRepository: AuthRepository;
+  private authCache: AuthCache;
 
-  constructor(authRepository: AuthRepository) {
+  constructor(authRepository: AuthRepository, authCache: AuthCache) {
     this.authRepository = authRepository;
+    this.authCache = authCache;
   }
 
   public async login(payload: ILoginRequest, metadata: ILoginMetadata): Promise<ILoginResponse> {
@@ -43,7 +45,6 @@ export class AuthService {
     );
 
     // Store Session in Redis
-    const sessionKey = `session:staff:${staff.id}:${deviceId}`;
     const sessionData = {
       deviceId,
       ip: metadata.ip,
@@ -56,9 +57,7 @@ export class AuthService {
     };
     
     try {
-      await redisClient.set(sessionKey, JSON.stringify(sessionData), {
-        EX: 7 * 24 * 60 * 60, // 7 days in seconds
-      });
+      await this.authCache.setSession(staff.id, deviceId, sessionData);
     } catch (redisErr) {
       console.error('Failed to save session in Redis:', redisErr);
       throw new AppError('Session creation failed', 500);
