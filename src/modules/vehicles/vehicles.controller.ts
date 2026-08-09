@@ -51,4 +51,32 @@ export class VehiclesController {
       next(err);
     }
   };
+
+  public updateVehicle = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = Number(req.params.id);
+      if (isNaN(id)) {
+        sendResponse(res, 400, 'Invalid vehicle ID parameter');
+        return;
+      }
+      const result = await this.vehiclesService.updateVehicle(id, req.body, req.file || null);
+      sendResponse(res, 200, 'Vehicle updated successfully', result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  public deleteVehicle = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = Number(req.params.id);
+      if (isNaN(id)) {
+        sendResponse(res, 400, 'Invalid vehicle ID parameter');
+        return;
+      }
+      await this.vehiclesService.deleteVehicle(id);
+      sendResponse(res, 200, 'Vehicle deleted successfully');
+    } catch (err) {
+      next(err);
+    }
+  };
 }

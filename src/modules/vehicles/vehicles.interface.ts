@@ -17,6 +17,13 @@ export interface ICreateVehicleRequest {
   daily_rate: number;
 }
 
+export interface IUpdateVehicleRequest {
+  name?: string;
+  plate_number?: string;
+  category?: string;
+  daily_rate?: number;
+}
+
 export interface IVehicleResponse {
   id: number;
   name: string;
@@ -26,4 +33,9 @@ export interface IVehicleResponse {
   photo_path: string | null;
   created_at: Date;
   updated_at: Date;
+}
+
+export interface IVehicleListResponse {
+  vehicles: IVehicleResponse[];
+  nextCursor: number | null;
 }

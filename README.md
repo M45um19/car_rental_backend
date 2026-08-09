@@ -2,7 +2,7 @@
 
 An enterprise-grade, highly scalable, and modular REST API backend for a Vehicle Rental Management System. This system allows rental company staff to log in and manage the vehicle fleet, records customer bookings as rentals (with strict collision prevention), and provides detailed monthly rental activity reporting.
 
-The system is architected around Node.js, TypeScript, PostgreSQL (with Knex.js), and features high-concurrency availability checks using Redis, search/filtering via OpenSearch, and event-driven logging/processing using Apache Kafka.
+The system is architected around Node.js, TypeScript, PostgreSQL (with Knex.js), and features high-concurrency availability checks using Redis, search/filtering via OpenSearch, Cloudinary image hosting, and event-driven logging/processing using Apache Kafka.
 
 ---
 
@@ -32,13 +32,14 @@ The system is architected around Node.js, TypeScript, PostgreSQL (with Knex.js),
 
 ## Features
 
-- **Authentication & Security:** Secure staff login with Bcrypt password hashing, JSON Web Tokens (JWT), and rate-limiting to prevent brute-force attacks.
-- **Vehicle Fleet Management:** CRUD operations for vehicles with multipart form-data support for uploading vehicle images (stored locally via Multer). Features soft deletion (`deleted_at`) to preserve relational integrity.
-- **Advanced Search & Filtering:** Vehicle search by name and category is accelerated using **OpenSearch** to offload database search queries.
+- **Authentication & Security:** Multi-device staff login with Bcrypt password hashing, dual JWT tokens (Access Token & Refresh Token), RFC-compliant UUIDv7 `deviceId`, and active session tracking in Redis.
+- **Vehicle Fleet Management:** CRUD operations for vehicles with multipart form-data photo uploads streamed directly to **Cloudinary**. Features soft deletion (`deleted_at`) to preserve relational integrity.
+- **Cursor Pagination:** `GET /vehicles` implements lightweight, fast cursor pagination returning `nextCursor` in response payloads.
+- **Advanced Search & Filtering:** Vehicle search by name, category, and plate number is accelerated using **OpenSearch** to offload database search queries.
 - **Booking Engine:** Rental booking with transactional overlap protection (prevents double-booking under race conditions). Total rental amount is calculated server-side based on the vehicle's daily rate.
 - **Pro-Rata Monthly Reporting:** Calculates occupancy metrics (total bookings, days rented, revenue) broken down per vehicle for a requested calendar month, ensuring cross-month rentals are pro-rated accurately.
 - **High Concurrency & Event Handling:**
-  - **Redis Caching:** Individual vehicle details and paginated vehicle lists are cached.
+  - **Redis Caching:** Individual vehicle details (`vehicle:{id}`) and Sorted Set index pagination (`vehicles:index` & `vehicles:index:{category}`) are cached in Redis.
   - **Kafka Integration:** Asynchronous event handling for booking creations (`rental.created`).
 
 ---
@@ -82,22 +83,23 @@ The project follows a **Modular Feature Architecture** combined with a clean **O
 - **Modular Design:** Each domain (`auth`, `vehicles`, `rentals`, `reports`) is grouped together in `src/modules/` containing its controller, service, repository, interface, routes, and validation schemas.
 - **Service Layer (OOP):** Route handlers delegate all business execution to Service classes. No business logic is placed inside the controller or routing layer.
 - **Repository Pattern:** Database queries (SQL/Knex) are completely abstracted away from the Service layer into Repository classes.
+- **Isolated Cache Layer:** Domain-specific cache operations are encapsulated in `AuthCache` and `VehiclesCache` wrapper classes.
 - **Transactional Consistency:** Rental availability checks and insert operations are wrapped in PostgreSQL transactions (`Serializable` or explicit locking) to ensure race-free execution.
 
 ---
 
 ## Tech Stack
 
-- **Runtime:** Node.js (v18+ LTS)
+- **Runtime:** Node.js (v20+ LTS)
 - **Language:** TypeScript
 - **Framework:** Express.js
 - **Query Builder & DB:** Knex.js & PostgreSQL
-- **Caching:** Redis (Node-Redis)
+- **Caching:** Redis (Node-Redis) & RedisInsight UI
 - **Search Engine:** OpenSearch
 - **Message Broker:** Apache Kafka
 - **Validation:** Joi
-- **File Storage:** Multer (local directory uploads)
-- **Authentication:** JWT (JSON Web Tokens) & Bcrypt
+- **File Storage:** Multer (Memory Storage) & Cloudinary SDK
+- **Authentication:** JWT (Access & Refresh secrets) & Bcrypt
 - **API Documentation:** Swagger / OpenAPI
 - **Linter/Formatter:** ESLint & Prettier
 
@@ -112,29 +114,37 @@ src/
 ├── app.ts                    # Express App Setup
 ├── app.container.ts          # Dependency Injection / Container
 ├── config/                   # Centralized configuration setup
+│   ├── cloudinary.ts         # Cloudinary SDK Client config
 │   ├── db.ts                 # Knex Connection Pool config
 │   ├── env.ts                # Environment Variable validation (Joi)
 │   ├── kafka.ts              # Kafka Connection Client
-│   └── redis.ts              # Redis Connection Client
+│   ├── opensearch.ts         # OpenSearch Connection Client
+│   ├── redis.ts              # Redis Connection Client
+│   └── swagger.ts            # Swagger UI route setup
 ├── database/                 # Database migrations and seed scripts
 │   ├── migrations/
 │   └── seeds/
+├── docs/                     # Swagger API documentation
+│   └── swagger.json
 ├── kafka/                    # Event-driven worker infrastructure
 │   ├── handlers/
 │   │   └── rental_event.handler.ts
 │   └── worker.ts             # Kafka Consumer Orchestrator
 ├── middleware/               # Common HTTP Middlewares
-│   ├── auth.middleware.ts    # JWT verification & Request decoration
+│   ├── auth.middleware.ts    # JWT verification & Redis session check
 │   ├── error.middleware.ts   # Global error handling
-│   └── upload.middleware.ts  # Multer setup for local uploads
+│   ├── upload.middleware.ts  # Multer memory storage middleware
+│   └── validation.middleware.ts # Joi request body validator
 ├── modules/                  # Modular Feature Domains
-│   ├── auth/                 # Authentication
-│   ├── vehicles/             # Vehicle Management
+│   ├── auth/                 # Authentication & Multi-Device Sessions
+│   ├── vehicles/             # Vehicle Management, Caching & Search
 │   ├── rentals/              # Rental / Booking Processing
 │   └── reports/              # Monthly activity analytics
 └── utils/                    # Shared utility classes
     ├── appError.ts           # Standard Custom AppError wrapper
-    └── sendResponse.ts       # Standard JSON response structure
+    ├── cloudinary.ts         # Cloudinary upload & delete stream helpers
+    ├── sendResponse.ts       # Standard JSON response structure
+    └── uuid.ts               # RFC-compliant UUIDv7 generator
 ```
 
 ---
@@ -194,32 +204,60 @@ erDiagram
 
 ## API Documentation
 
-All routes except `POST /api/auth/login` are protected by JWT middleware. The middleware decodes the token and attaches the staff payload to Express's `req.user`.
+Protected routes require JWT bearer token in header: `Authorization: Bearer <accessToken>`.
 
 ### Authentication
 - `POST /api/auth/login`
-  - **Body:** `{ email, password, deviceName }` (where `deviceName` is optional)
+  - **Body:** `{ email, password, deviceName }` (`deviceName` optional)
   - **Response:** `{ accessToken, refreshToken, deviceId, staff: { id, email, name } }`
-  - **Note:** Generates a unique UUIDv7 session `deviceId` and supports concurrent device logins. Saves session details in Redis.
+  - **Note:** Generates a unique UUIDv7 session `deviceId` and supports concurrent device logins. Saves session details in Redis (`session:staff:{id}:{deviceId}`).
 
 ### Vehicles
-- `GET /vehicles`
-  - **Parameters:** `cursor`, `limit`, `category` (filter), `search` (name search)
-  - **Note:** Accelerated by Redis list cache and OpenSearch full-text queries.
-- `GET /vehicles/:id`
-  - **Response:** Detailed vehicle object (fetched from Redis cache if hit).
-- `POST /vehicles`
+- `GET /api/vehicles` (Public)
+  - **Query Parameters:** `cursor` (number), `limit` (number), `category` (string), `search` (string)
+  - **Response:**
+    ```json
+    {
+      "success": true,
+      "message": "Vehicles list fetched successfully",
+      "data": {
+        "vehicles": [
+          {
+            "id": 1,
+            "name": "Tesla Model S",
+            "plate_number": "XYZ-789",
+            "category": "Sedan",
+            "daily_rate": 120,
+            "photo_path": "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+            "created_at": "2026-08-09T14:30:00.000Z",
+            "updated_at": "2026-08-09T14:30:00.000Z"
+          }
+        ],
+        "nextCursor": 2
+      }
+    }
+    ```
+  - **Note:** Uses Redis ZSET (`vehicles:index` & `vehicles:index:{category}`) for fast cursor pagination and OpenSearch for fuzzy text search across `name`, `category`, and `plate_number`.
+
+- `GET /api/vehicles/:id` (Public)
+  - **Response:** Vehicle object fetched from Redis `vehicle:{id}` details cache or database.
+
+- `POST /api/vehicles` (Staff Only)
   - **Headers:** `Content-Type: multipart/form-data`
-  - **Body:** Form fields for `name`, `plate_number`, `category`, `daily_rate` + optional file `photo`.
-- `PUT /vehicles/:id`
+  - **Body:** `name`, `plate_number`, `category`, `daily_rate` + optional file `photo`.
+  - **Action:** Validates uniqueness of plate number, streams image buffer to Cloudinary, creates PostgreSQL record, caches details in Redis, updates ZSET index (if hydrated), and indexes document in OpenSearch.
+
+- `PUT /api/vehicles/:id` (Staff Only)
   - **Headers:** `Content-Type: multipart/form-data`
-  - **Body:** Update vehicle properties. Supports file replacement (automatically cleans up the old photo from disk).
-- `DELETE /vehicles/:id`
-  - **Action:** Soft-deletes the vehicle by setting `deleted_at = NOW()`.
+  - **Body:** Optional fields `name`, `plate_number`, `category`, `daily_rate` + optional file `photo`.
+  - **Action:** Updates PostgreSQL record, optionally uploads new photo to Cloudinary, updates Redis details cache & category ZSETs safely (verifying `indexExists`), and updates OpenSearch document.
+
+- `DELETE /api/vehicles/:id` (Staff Only)
+  - **Action:** Soft-deletes vehicle by setting `deleted_at = NOW()`, purges Redis details cache, removes vehicle ID from hydrated ZSET indexes, and deletes document from OpenSearch index.
 
 ### Rentals
 - `GET /rentals`
-  - **Parameters:** `vehicle_id`, `status`, `start_date`, `end_date`, `page`, `limit` (Bonus)
+  - **Parameters:** `vehicle_id`, `status`, `start_date`, `end_date`, `page`, `limit`
 - `GET /rentals/:id`
   - **Response:** Detailed rental object with vehicle details.
 - `POST /rentals`
@@ -277,9 +315,9 @@ const overlappingRentals = await trx('rentals')
     builder.where('start_date', '<=', end_date)
            .andWhere('end_date', '>=', start_date);
   })
-  .andWhereNot('id', currentRentalId || -1); // For updates
+  .andWhereNot('id', currentRentalId || -1);
 ```
-**Transaction Wrapper:** Wrap this query and the subsequent `INSERT`/`UPDATE` in an explicit database transaction with a locking mechanism (e.g. `FOR UPDATE` on the target vehicle row, or setting transaction isolation level to `SERIALIZABLE`) to avoid race conditions.
+**Transaction Wrapper:** Wrap this query and the subsequent `INSERT`/`UPDATE` in an explicit database transaction with a locking mechanism (`FOR UPDATE` on target vehicle row or isolation level `SERIALIZABLE`) to avoid race conditions.
 
 ---
 
@@ -300,7 +338,6 @@ The number of rented days within the target month is:
 ```sql
 GREATEST(0, (LEAST(end_date, :month_end) - GREATEST(start_date, :month_start)) + 1)
 ```
-*Note: A single-day rental (same start and end date) counts as 1 day, which is handled by adding `+1` to the date difference.*
 
 #### Report Query (PostgreSQL SQL):
 ```sql
@@ -328,11 +365,7 @@ GROUP BY v.id, v.name;
 ## Setup & Installation
 
 ### Prerequisites
-- Node.js (v18 or higher)
-- PostgreSQL database
-- Redis instance (for caching)
-- OpenSearch instance (for indexing and search)
-- Kafka cluster running in KRaft mode (for event tracking)
+- Node.js (v20 or higher)
 - Docker & Docker Compose (Recommended for running services locally)
 
 ### Environment Variables
@@ -343,20 +376,21 @@ Create a `.env` file in the root directory. You can copy the structure from `.en
 cp .env.example .env
 ```
 
-Define the configuration variables inside `.env`:
+Define configuration variables inside `.env`:
 
 ```env
 # Server Config
 PORT=3000
 NODE_ENV=development
-JWT_SECRET=your_super_secure_jwt_secret_key
+JWT_ACCESS_SECRET=your_access_token_secret_key
+JWT_REFRESH_SECRET=your_refresh_token_secret_key
 UPLOAD_PATH=uploads/
 
 # Database Config (PostgreSQL)
 DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_USER=postgres
-DB_PASSWORD=your_postgres_password
+DB_PASSWORD=postgres
 DB_NAME=vehicle_rental_db
 DB_POOL_MIN=2
 DB_POOL_MAX=10
@@ -367,32 +401,35 @@ REDIS_PORT=6379
 REDIS_PASSWORD=
 
 # OpenSearch Config
-OPENSEARCH_NODE=http://localhost:9200
+OPENSEARCH_NODE=http://127.0.0.1:9200
 OPENSEARCH_USER=admin
 OPENSEARCH_PASSWORD=admin
 
 # Kafka Broker Config
 KAFKA_CLIENT_ID=rental-service
-KAFKA_BROKERS=localhost:9092
+KAFKA_BROKERS=127.0.0.1:9092
+KAFKA_TOPIC=rental-events
+KAFKA_GROUP_ID=rental-group
+
+# Cloudinary Config
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
 ```
 
 ---
 
 ### Docker & External Services Setup
 
-For local development, it is highly recommended to run PostgreSQL, Redis, OpenSearch, and Kafka using Docker Compose.
+For local development, start all containers (PostgreSQL, Redis, RedisInsight, OpenSearch, Kafka, App, Worker) using Docker Compose:
 
-1. **Start Services:**
-   ```bash
-   docker-compose up -d
-   ```
-2. **Verify Services:** Ensure the services are running and accessible on their respective ports defined in the `.env` file.
+```bash
+docker compose up --build -d
+```
 
 ---
 
 ### Database Migrations & Seeds
-
-The project uses Knex migration files to setup database tables and seed files to inject initial staff members, vehicles, and cross-month bookings for verification.
 
 1. **Run Migrations:**
    ```bash
@@ -430,6 +467,10 @@ npm run dev:server
 # Start Kafka Event Worker
 npm run dev:worker
 ```
+
+#### Web Interfaces & Management UIs
+- **Swagger Open API Docs:** `http://localhost:3000/docs`
+- **RedisInsight Web UI:** `http://localhost:5540`
 
 #### Production Build
 Build TypeScript compilation and run the built JS output:

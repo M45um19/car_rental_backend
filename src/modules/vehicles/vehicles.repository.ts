@@ -24,16 +24,16 @@ export class VehiclesRepository {
     return vehicle || null;
   }
 
-  public async findActiveIds(category?: string): Promise<{ id: number; created_at: Date }[]> {
+  public async findActiveIds(category?: string): Promise<{ id: number }[]> {
     let query = this.db('vehicles')
-      .select('id', 'created_at')
+      .select('id')
       .where('deleted_at', null);
 
     if (category) {
       query = query.andWhere('category', category);
     }
 
-    return query.orderBy('created_at', 'desc');
+    return query.orderBy('id', 'desc');
   }
 
   public async findManyByIds(ids: number[]): Promise<IVehicle[]> {
@@ -71,5 +71,28 @@ export class VehiclesRepository {
       .returning('*');
 
     return insertedVehicle;
+  }
+
+  public async update(id: number, vehicleData: Partial<IVehicle>): Promise<IVehicle> {
+    const [updatedVehicle] = await this.db('vehicles')
+      .where('id', id)
+      .andWhere('deleted_at', null)
+      .update({
+        ...vehicleData,
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    return updatedVehicle;
+  }
+
+  public async softDelete(id: number): Promise<void> {
+    await this.db('vehicles')
+      .where('id', id)
+      .andWhere('deleted_at', null)
+      .update({
+        deleted_at: new Date(),
+        updated_at: new Date(),
+      });
   }
 }
