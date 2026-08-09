@@ -194,13 +194,13 @@ erDiagram
 
 ## API Documentation
 
-All routes except `POST /auth/login` are protected by JWT middleware. The middleware decodes the token and attaches the staff payload to Express's `req.user`.
+All routes except `POST /api/auth/login` are protected by JWT middleware. The middleware decodes the token and attaches the staff payload to Express's `req.user`.
 
 ### Authentication
-- `POST /auth/login`
-  - **Body:** `{ email, password }`
-  - **Response:** `{ token, staff: { id, email, name } }`
-  - **Note:** Subject to basic rate-limiting to prevent brute force attacks.
+- `POST /api/auth/login`
+  - **Body:** `{ email, password, deviceName }` (where `deviceName` is optional)
+  - **Response:** `{ accessToken, refreshToken, deviceId, staff: { id, email, name } }`
+  - **Note:** Generates a unique UUIDv7 session `deviceId` and supports concurrent device logins. Saves session details in Redis.
 
 ### Vehicles
 - `GET /vehicles`
@@ -332,7 +332,7 @@ GROUP BY v.id, v.name;
 - PostgreSQL database
 - Redis instance (for caching)
 - OpenSearch instance (for indexing and search)
-- Kafka cluster & Zookeeper (for event tracking)
+- Kafka cluster running in KRaft mode (for event tracking)
 - Docker & Docker Compose (Recommended for running services locally)
 
 ### Environment Variables
