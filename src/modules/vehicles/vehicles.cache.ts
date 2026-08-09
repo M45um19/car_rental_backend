@@ -56,6 +56,14 @@ export class VehiclesCache {
     });
   }
 
+  public async deleteVehicle(id: number): Promise<void> {
+    await redisClient.del(`vehicle:${id}`);
+  }
+
+  public async zRemIndex(key: string, member: string): Promise<void> {
+    await redisClient.zRem(key, member);
+  }
+
   public async deleteIndex(key: string): Promise<void> {
     await redisClient.del(key);
   }

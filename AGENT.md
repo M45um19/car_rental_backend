@@ -32,8 +32,8 @@ You are tasked with building an enterprise-grade, highly scalable, and modular R
   * **Function:** Caches active session payloads `{ deviceId, ip, deviceName, staff: { id, email, name } }` with a 7-day TTL (matching the Refresh Token expiry) to support concurrent multi-device logins and verify session state.
 
 * **Vehicle List Cache (Pagination)**
-  * **Key Pattern:** `vehicles:list`
-  * **Function:** Stores an ordered cache of up to 1,000 vehicle IDs (integer IDs) using cursor pagination to handle high-read requests efficiently.
+  * **Key Pattern:** `vehicles:index` (and `vehicles:index:{category}`)
+  * **Function:** Stores an ordered Redis Sorted Set (ZSET) of vehicle IDs scored by timestamp to handle cursor pagination and sorting efficiently.
 
 * **Vehicle Details Cache**
   * **Key Pattern:** `vehicle:{id}`
