@@ -4,7 +4,14 @@ export interface ICreateRentalRequest {
   customer_phone: string;
   start_date: string;
   end_date: string;
-  total_amount: number;
+}
+
+export interface IUpdateRentalRequest {
+  customer_name?: string;
+  customer_phone?: string;
+  start_date?: string;
+  end_date?: string;
+  status?: 'booked' | 'ongoing' | 'completed' | 'cancelled';
 }
 
 export interface IRental {
@@ -32,6 +39,20 @@ export interface IRentalResponse {
   message?: string;
   created_at?: Date | string;
   updated_at?: Date | string;
+}
+
+export interface IRentalListResponse {
+  rentals: IRentalResponse[];
+  nextCursor: number | null;
+}
+
+export interface IRentalListFilters {
+  limit?: number;
+  cursor?: number;
+  vehicle_id?: number;
+  status?: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 export interface IRentalPayload {

@@ -36,8 +36,25 @@ export const createRentalSchema = Joi.object({
       'date.min': 'End date must be on or after start date',
       'any.required': 'End date is required',
     }),
-  total_amount: Joi.number().positive().required().messages({
-    'number.positive': 'Total amount must be a positive number',
-    'any.required': 'Total amount is required',
-  }),
 });
+
+export const updateRentalSchema = Joi.object({
+  customer_name: Joi.string().trim().min(2).max(100).optional(),
+  customer_phone: Joi.string().trim().min(5).max(20).optional(),
+  start_date: Joi.string().isoDate().optional(),
+  end_date: Joi.string()
+    .isoDate()
+    .optional()
+    .custom((value, helpers) => {
+      const { start_date } = helpers.state.ancestors[0];
+      if (start_date && new Date(value) < new Date(start_date)) {
+        return helpers.error('date.min');
+      }
+      return value;
+    })
+    .messages({
+      'string.isoDate': 'End date must be a valid ISO date string (YYYY-MM-DD)',
+      'date.min': 'End date must be on or after start date',
+    }),
+  status: Joi.string().valid('booked', 'ongoing', 'completed', 'cancelled').optional(),
+}).min(1);

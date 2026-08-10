@@ -18,6 +18,7 @@ The system is architected around Node.js, TypeScript, PostgreSQL (with Knex.js),
   - [Rentals](#rentals)
   - [Reports](#reports)
 - [Business Logic & Technical Decisions](#business-logic--technical-decisions)
+  - [Cache-First Vehicle Lookup & Automatic Rate Calculation](#cache-first-vehicle-lookup--automatic-rate-calculation)
   - [Distributed Concurrency Lock & Redis Slots](#distributed-concurrency-lock--redis-slots)
   - [Kafka Batch Processing & Single-Query Bulk Overlap Check](#kafka-batch-processing--single-query-bulk-overlap-check)
   - [Binary Split DLQ Strategy](#binary-split-dlq-strategy)
@@ -36,14 +37,15 @@ The system is architected around Node.js, TypeScript, PostgreSQL (with Knex.js),
 
 - **Authentication & Security:** Multi-device staff login with Bcrypt password hashing, dual JWT tokens (Access Token & Refresh Token), RFC-compliant UUIDv7 `deviceId`, and active session tracking in Redis.
 - **Vehicle Fleet Management:** CRUD operations for vehicles with multipart form-data photo uploads saved locally to disk (`uploads/vehicles/`) and returned with fully-qualified domain URLs (`APP_DOMAIN`). Soft deletion (`deleted_at`) preserves relational integrity.
-- **Cursor Pagination:** `GET /vehicles` implements lightweight, fast cursor pagination returning `nextCursor` in response payloads.
+- **Cursor Pagination:** `GET /vehicles` and `GET /rentals` implement lightweight, fast keyset cursor pagination returning `nextCursor` in response payloads.
 - **Advanced Search & Filtering:** Vehicle search by name, category, and plate number is accelerated using **OpenSearch** to offload database search queries.
-- **High-Concurrency Booking Engine (`POST /api/rentals`)**:
+- **High-Concurrency Booking Engine (`/api/rentals`)**:
+  - **Cache-First Vehicle Lookup:** Checks Redis `vehicle:{id}` cache first for vehicle details (`daily_rate`), falling back to DB and caching the result on cache miss.
+  - **Automatic Backend `total_amount` Calculation:** Calculates `total_amount = daily_rate * duration_days` on the backend, omitting `total_amount` from client request bodies.
   - **Distributed Redis Lock:** Uses atomic `SET NX PX` with unique tokens and Lua script release to block concurrent booking collisions across multi-container deployments.
-  - **Redis Availability Slot & TTL Strategy:** Checks date slot keys (`rental:slot:{vehicle_id}:{YYYY-MM-DD}`). Applies calculated TTLs per day (midnight end + 24h buffer) for automatic eviction.
+  - **Redis Availability Slot & TTL Strategy:** Checks date slot keys (`rental:slot:{vehicle_id}:{YYYY-MM-DD}`). Applies calculated TTLs per day (midnight end + 24h buffer) for automatic eviction. Released on rental cancellation or deletion.
   - **High-Throughput Kafka Batching:** Ingress queues rental requests to `rental-batch-queue`. Background consumer (`worker.ts`) flushes batches when reaching **100 items** OR a **2-second time window**.
   - **Single-Query Bulk Overlap Check:** Checks database collisions for all 100 batch items in 1 SQL query alongside in-memory intra-batch collision detection.
-  - **Knex Transaction & SQL Row Locking:** Wraps batch inserts in database transactions with `FOR UPDATE` row-level SQL locking on `vehicles`.
   - **Binary Split DLQ Strategy:** Recursively splits failing batches (divide & conquer) to isolate poisonous/corrupted records into `rental-dlq` while successfully committing all valid records in bulk.
 - **Pro-Rata Monthly Reporting:** Calculates occupancy metrics (total bookings, days rented, revenue) broken down per vehicle for a requested calendar month, ensuring cross-month rentals are pro-rated accurately.
 
@@ -207,28 +209,6 @@ Protected routes require JWT bearer token in header: `Authorization: Bearer <acc
 ### Vehicles
 - `GET /api/vehicles` (Public)
   - **Query Parameters:** `cursor` (number), `limit` (number), `category` (string), `search` (string)
-  - **Response:**
-    ```json
-    {
-      "success": true,
-      "message": "Vehicles list fetched successfully",
-      "data": {
-        "vehicles": [
-          {
-            "id": 1,
-            "name": "Tesla Model S",
-            "plate_number": "XYZ-789",
-            "category": "Sedan",
-            "daily_rate": 120,
-            "photo_path": "http://localhost:3000/uploads/vehicles/a1b2c3d4.jpg",
-            "created_at": "2026-08-09T14:30:00.000Z",
-            "updated_at": "2026-08-09T14:30:00.000Z"
-          }
-        ],
-        "nextCursor": 2
-      }
-    }
-    ```
 
 - `GET /api/vehicles/:id` (Public)
   - **Response:** Vehicle object fetched from Redis `vehicle:{id}` details cache or database.
@@ -236,15 +216,13 @@ Protected routes require JWT bearer token in header: `Authorization: Bearer <acc
 - `POST /api/vehicles` (Staff Only)
   - **Headers:** `Content-Type: multipart/form-data`
   - **Body:** `name`, `plate_number`, `category`, `daily_rate` + optional file `photo`.
-  - **Action:** Validates plate uniqueness, saves image locally to `uploads/vehicles/`, creates PostgreSQL record, caches details in Redis, and indexes document in OpenSearch.
 
 - `PUT /api/vehicles/:id` (Staff Only)
   - **Headers:** `Content-Type: multipart/form-data`
   - **Body:** Optional fields `name`, `plate_number`, `category`, `daily_rate` + optional file `photo`.
-  - **Action:** Updates PostgreSQL record, replaces photo locally (unlinking old file), updates Redis details cache & category ZSETs, and updates OpenSearch.
 
 - `DELETE /api/vehicles/:id` (Staff Only)
-  - **Action:** Soft-deletes vehicle (`deleted_at = NOW()`), removes photo from disk, purges Redis caches, and removes document from OpenSearch index.
+  - **Action:** Soft-deletes vehicle (`deleted_at = NOW()`), purges Redis details cache, and removes document from OpenSearch.
 
 ### Rentals
 - `POST /api/rentals` (Public / Staff)
@@ -255,14 +233,24 @@ Protected routes require JWT bearer token in header: `Authorization: Bearer <acc
       "customer_name": "John Doe",
       "customer_phone": "+1234567890",
       "start_date": "2026-08-15",
-      "end_date": "2026-08-20",
-      "total_amount": 250.00
+      "end_date": "2026-08-20"
     }
     ```
-  - **Action:** Acquires Redis distributed lock, checks date slots in Redis, reserves slots with TTL, and dispatches payload to Kafka topic `rental-batch-queue`. Returns `201 Created` with queued message status.
+  - **Action:** Checks Redis vehicle cache (`vehicle:{id}`) for `daily_rate`, calculates `total_amount` server-side, acquires Redis lock, checks/reserves Redis date slots, and dispatches payload to Kafka.
+
+- `GET /api/rentals` (Staff Only)
+  - **Query Parameters:** `limit` (default 10), `cursor` (number), `vehicle_id` (number), `status` (string), `start_date` (date), `end_date` (date).
+  - **Response:** Keyset paginated object `{ rentals: [...], nextCursor: number | null }`.
 
 - `GET /api/rentals/:id` (Staff Only)
-  - **Response:** Detailed rental record fetched by ID from PostgreSQL.
+  - **Response:** Detailed rental record by ID.
+
+- `PUT /api/rentals/:id` (Staff Only)
+  - **Body:** Optional fields `customer_name`, `customer_phone`, `start_date`, `end_date`, `status`.
+  - **Action:** Recalculates `total_amount` if dates change, updates PostgreSQL record, and updates Redis slot keys.
+
+- `DELETE /api/rentals/:id` (Staff Only)
+  - **Action:** Deletes rental record from PostgreSQL and releases reserved Redis date slots (`rental:slot:{vehicle_id}:{date}`).
 
 ### Reports
 - `GET /api/reports/rentals?month=YYYY-MM&vehicle_id=123`
@@ -271,6 +259,17 @@ Protected routes require JWT bearer token in header: `Authorization: Bearer <acc
 ---
 
 ## Business Logic & Technical Decisions
+
+### Cache-First Vehicle Lookup & Automatic Rate Calculation
+
+To optimize rental creation and update latency:
+1. **`RentalService` Checks Redis Cache First**: Looks up `vehicle:{id}` in Redis via `VehiclesCache.getVehicle(id)`.
+2. **Database Fallback & Cache Hydration**: On a cache miss, queries PostgreSQL `vehicles` table and populates `vehicle:{id}` in Redis with a 1-hour TTL.
+3. **Server-Side Total Calculation**: Calculates duration days:
+   $$\text{Days} = \max\left(1, \left\lceil \frac{\text{end\_date} - \text{start\_date}}{86,400,000} \right\rceil + 1\right)$$
+   Sets `total_amount = daily_rate * Days` automatically on the backend, protecting against client-side price tampering.
+
+---
 
 ### Distributed Concurrency Lock & Redis Slots
 
@@ -282,6 +281,7 @@ For horizontal scalability across multi-container deployments:
 2. **Date Slot Reservation (`RentalCache.reserveSlots`)**:
    - Key format: `rental:slot:{vehicle_id}:{YYYY-MM-DD}`.
    - Calculates TTL per date (`targetDateEnd - now + 24h buffer`) ensuring past slots automatically evict from Redis.
+   - Released on cancellation or deletion via `RentalCache.releaseSlots`.
 
 ---
 
@@ -291,8 +291,6 @@ Background worker (`src/kafka/rental.handler.ts`) buffers incoming messages and 
 1. **Intra-Batch Collision Check:** Evaluates whether two requests inside the same batch overlap with each other in memory.
 2. **Single-Query Bulk DB Overlap Check (`findOverlappingRentalsBulk`)**:
    - Executes 1 SQL `SELECT` query with `OR` clauses across all 100 items instead of 100 separate queries in a loop, reducing DB latency by 99%.
-3. **Row-Level SQL Lock (`FOR UPDATE`)**:
-   - Acquires `FOR UPDATE` SQL locks on unique vehicle IDs inside a Knex transaction before bulk inserting valid items.
 
 ---
 
