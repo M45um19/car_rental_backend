@@ -559,6 +559,85 @@
       }
     },
     "/rentals": {
+      "get": {
+        "summary": "Fetch paginated rentals list",
+        "description": "Fetches paginated list of rentals from PostgreSQL using keyset cursor pagination and optional vehicle_id and status filters.",
+        "tags": [
+          "Rentals"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of items to fetch (default 10)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Keyset cursor (last seen rental ID)",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "vehicle_id",
+            "in": "query",
+            "description": "Filter by vehicle ID",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by rental status (booked, ongoing, completed, cancelled)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Filter by start date (YYYY-MM-DD)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "Filter by end date (YYYY-MM-DD)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rentals list fetched successfully"
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid token"
+          }
+        }
+      },
       "post": {
         "summary": "Create a new rental booking",
         "description": "Submits a rental booking request. Checks Redis availability slots, acquires Redis lock, and queues message into Kafka batch pipeline.",
@@ -576,8 +655,7 @@
                   "customer_name",
                   "customer_phone",
                   "start_date",
-                  "end_date",
-                  "total_amount"
+                  "end_date"
                 ],
                 "properties": {
                   "vehicle_id": {
@@ -601,10 +679,6 @@
                     "type": "string",
                     "format": "date",
                     "example": "2026-08-20"
-                  },
-                  "total_amount": {
-                    "type": "number",
-                    "example": 250.00
                   }
                 }
               }
@@ -653,6 +727,123 @@
         "responses": {
           "200": {
             "description": "Rental details fetched successfully"
+          },
+          "400": {
+            "description": "Invalid rental ID parameter"
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid token"
+          },
+          "404": {
+            "description": "Rental not found"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update an existing rental",
+        "description": "Updates fields of an existing rental. If start_date, end_date, or status changes, automatically updates Redis slot availability cache.",
+        "tags": [
+          "Rentals"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Rental ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "customer_name": {
+                    "type": "string",
+                    "example": "Jane Doe"
+                  },
+                  "customer_phone": {
+                    "type": "string",
+                    "example": "+9876543210"
+                  },
+                  "start_date": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-08-18"
+                  },
+                  "end_date": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-08-22"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "booked",
+                      "ongoing",
+                      "completed",
+                      "cancelled"
+                    ],
+                    "example": "ongoing"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rental updated successfully"
+          },
+          "400": {
+            "description": "Validation error or invalid rental ID parameter"
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid token"
+          },
+          "404": {
+            "description": "Rental not found"
+          },
+          "409": {
+            "description": "Conflict - Target date range is already booked by another rental"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a rental record by ID",
+        "description": "Deletes a rental record from PostgreSQL and automatically releases its reserved date slot availability keys in Redis.",
+        "tags": [
+          "Rentals"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Rental ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rental deleted successfully"
           },
           "400": {
             "description": "Invalid rental ID parameter"
