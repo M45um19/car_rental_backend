@@ -56,6 +56,7 @@ class AppContainer {
       this.rentalRepository,
       this.rentalCache,
       this.vehiclesRepository,
+      this.vehiclesCache,
     );
     this.rentalController = new RentalController(this.rentalService);
     this.rentalRouter = createRentalsRouter(this.rentalController);

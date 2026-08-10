@@ -12,7 +12,7 @@ You are tasked with building an enterprise-grade, highly scalable, and modular R
 - **Validation:** Joi
 - **Authentication & Security:** JSON Web Tokens (JWT), Bcrypt for password hashing, Express-Rate-Limit for auth routes
 - **File Management:** Local filesystem (`fs`) image storage served via Express static middleware using configurable `APP_DOMAIN` and `UPLOAD_PATH`
-- **Caching & Distributed Locks:** Redis for session caching, vehicle list/details cache, date slot TTL reservations, and distributed mutex concurrency locks (`SET NX PX` + Lua script) for multi-container deployments
+- **Caching & Distributed Locks:** Redis for session caching, vehicle list/details cache (`vehicle:{id}`), date slot TTL reservations (`rental:slot:{vehicle_id}:{YYYY-MM-DD}`), and distributed mutex concurrency locks (`SET NX PX` + Lua script) for multi-container deployments
 - **Messaging & Event-Driven:** Apache Kafka for asynchronous background workflows, batch processing (`rental-batch-queue`), and Dead Letter Queue (`rental-dlq`) fault isolation
 - **Documentation:** Swagger / OpenAPI
 - **Quality Control:** ESLint and Prettier
@@ -21,6 +21,7 @@ You are tasked with building an enterprise-grade, highly scalable, and modular R
 - **Modular Feature Architecture:** Each domain (`auth`, `vehicles`, `rentals`, `reports`) is self-contained under `src/modules/` with its own controller, service, repository, routes, interfaces, and validation schemas.
 - **Service Layer & OOP:** Business logic resides inside Service classes. Controllers only handle HTTP request parsing, invocation, and response formatting.
 - **Repository Pattern:** Database data-fetching and bulk SQL queries are isolated inside Repository classes.
+- **Cache-First Vehicle Lookup & Automatic Rate Calculation:** `RentalService` checks Redis `vehicle:{id}` cache first for `daily_rate` (falling back to DB and populating cache), then automatically computes `total_amount` server-side (`daily_rate * duration_days`).
 - **Distributed Concurrency Control:** Redis atomic distributed locking prevents concurrent booking requests across multi-container instances for target date slots.
 - **Transactional Integrity:** Knex database transactions wrap critical bulk operations for atomic commits.
 - **Event-Driven Messaging & Binary Split DLQ:** High-throughput Kafka batch consumer (`src/kafka/rental.handler.ts`) processes rentals (100 items / 2s window) with Binary Split Algorithm (divide & conquer) to isolate poisonous records into `rental-dlq` while bulk-committing valid records.
@@ -34,7 +35,7 @@ You are tasked with building an enterprise-grade, highly scalable, and modular R
 
 * **Vehicle List & Details Cache**
   * **Key Pattern:** `vehicles:index` (Sorted Set ZSET), `vehicles:index:{category}`, and `vehicle:{id}`
-  * **Function:** Enables fast cursor pagination and instant vehicle lookups.
+  * **Function:** Enables fast cursor pagination, instant vehicle lookups, and zero-DB-latency rate calculations in rental processing.
 
 * **Distributed Concurrency Lock**
   * **Key Pattern:** `rental:lock:{vehicle_id}:{start_date}:{end_date}`
@@ -42,7 +43,7 @@ You are tasked with building an enterprise-grade, highly scalable, and modular R
 
 * **Availability Slot Check & TTL**
   * **Key Pattern:** `rental:slot:{vehicle_id}:{YYYY-MM-DD}`
-  * **Function:** Reserves date slots with calculated TTLs per day (midnight end + 24h buffer) so past date slot data automatically expires.
+  * **Function:** Reserves date slots with calculated TTLs per day (midnight end + 24h buffer) so past date slot data automatically expires. Released on rental deletion or cancellation.
 
 ## 2. OpenSearch Strategy (Search & Filtering)
 * **Index Name:** `vehicles_index`
