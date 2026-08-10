@@ -2,7 +2,7 @@ import { createApp } from './app';
 import { env } from './config/env';
 import { db } from './config/db';
 import { redisClient } from './config/redis';
-import { getKafkaProducer } from './config/kafka';
+import { getKafkaProducer, ensureTopicsExist } from './config/kafka';
 
 const startServer = async () => {
   const app = createApp();
@@ -23,8 +23,9 @@ const startServer = async () => {
     console.error('Redis connection failed:', error);
   }
 
-  // 3. Test/Connect Kafka Producer
+  // 3. Test/Connect Kafka Producer & Ensure Topics Exist
   try {
+    await ensureTopicsExist(['rental-batch-queue', 'rental-dlq']);
     const producer = getKafkaProducer();
     await producer.connect();
     console.log('Kafka producer connected successfully.');

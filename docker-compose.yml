@@ -117,6 +117,7 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      APP_DOMAIN: ${APP_DOMAIN:-http://localhost:3000}
       UPLOAD_PATH: ${UPLOAD_PATH:-uploads/}
       DB_HOST: db
       DB_PORT: 5432
@@ -128,11 +129,7 @@ services:
       OPENSEARCH_NODE: http://opensearch:9200
       KAFKA_CLIENT_ID: ${KAFKA_CLIENT_ID:-rental-service}
       KAFKA_BROKERS: kafka:9092
-      KAFKA_TOPIC: ${KAFKA_TOPIC:-rental-events}
       KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-rental-group}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
     depends_on:
       db:
         condition: service_healthy
@@ -158,6 +155,7 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      APP_DOMAIN: ${APP_DOMAIN:-http://localhost:3000}
       UPLOAD_PATH: ${UPLOAD_PATH:-uploads/}
       DB_HOST: db
       DB_PORT: 5432
@@ -169,11 +167,7 @@ services:
       OPENSEARCH_NODE: http://opensearch:9200
       KAFKA_CLIENT_ID: ${KAFKA_CLIENT_ID:-rental-service}
       KAFKA_BROKERS: kafka:9092
-      KAFKA_TOPIC: ${KAFKA_TOPIC:-rental-events}
       KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-rental-group}
-      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
-      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
-      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
     depends_on:
       db:
         condition: service_healthy
