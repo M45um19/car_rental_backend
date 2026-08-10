@@ -7,7 +7,7 @@ import {
   IVehicle,
 } from './vehicles.interface';
 import { AppError } from '../../utils/appError';
-import { uploadToCloudinary } from '../../utils/cloudinary';
+import { uploadImage, deleteImage } from '../../utils/fileUpload';
 import { openSearchClient } from '../../config/opensearch';
 import { VehiclesCache } from './vehicles.cache';
 import { Client } from '@opensearch-project/opensearch';
@@ -142,10 +142,10 @@ export class VehiclesService {
     let photoUrl: string | null = null;
     if (file) {
       try {
-        const uploadResult = await uploadToCloudinary(file.buffer, 'vehicles');
+        const uploadResult = await uploadImage(file.buffer, file.originalname, 'vehicles');
         photoUrl = uploadResult.url;
       } catch (uploadErr) {
-        console.error('Failed to upload photo to Cloudinary:', uploadErr);
+        console.error('Failed to upload photo locally:', uploadErr);
         throw new AppError('Failed to upload vehicle photo', 500);
       }
     }
@@ -382,10 +382,14 @@ export class VehiclesService {
     let photoUrl = existingVehicle.photo_path;
     if (file) {
       try {
-        const uploadResult = await uploadToCloudinary(file.buffer, 'vehicles');
+        const uploadResult = await uploadImage(file.buffer, file.originalname, 'vehicles');
         photoUrl = uploadResult.url;
+
+        if (existingVehicle.photo_path) {
+          await deleteImage(existingVehicle.photo_path);
+        }
       } catch (uploadErr) {
-        console.error('Failed to upload photo to Cloudinary:', uploadErr);
+        console.error('Failed to upload photo locally:', uploadErr);
         throw new AppError('Failed to upload vehicle photo', 500);
       }
     }
@@ -458,6 +462,10 @@ export class VehiclesService {
     }
 
     await this.vehiclesRepository.softDelete(id);
+
+    if (existingVehicle.photo_path) {
+      await deleteImage(existingVehicle.photo_path);
+    }
 
     try {
       await this.vehiclesCache.deleteVehicle(id);

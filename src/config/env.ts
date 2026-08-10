@@ -9,6 +9,7 @@ const envSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
   JWT_ACCESS_SECRET: Joi.string().required(),
   JWT_REFRESH_SECRET: Joi.string().required(),
+  APP_DOMAIN: Joi.string().default('http://localhost:3000'),
   UPLOAD_PATH: Joi.string().default('uploads/'),
   DB_HOST: Joi.string().required(),
   DB_PORT: Joi.number().default(5432),
@@ -23,11 +24,7 @@ const envSchema = Joi.object({
   OPENSEARCH_NODE: Joi.string().uri().required(),
   KAFKA_CLIENT_ID: Joi.string().default('rental-service'),
   KAFKA_BROKERS: Joi.string().required(),
-  KAFKA_TOPIC: Joi.string().default('rental-events'),
   KAFKA_GROUP_ID: Joi.string().default('rental-group'),
-  CLOUDINARY_CLOUD_NAME: Joi.string().required(),
-  CLOUDINARY_API_KEY: Joi.string().required(),
-  CLOUDINARY_API_SECRET: Joi.string().required(),
 }).unknown().required();
 
 const { error, value: envVars } = envSchema.validate(process.env);
@@ -41,6 +38,7 @@ export const env = {
   nodeEnv: envVars.NODE_ENV as string,
   jwtAccessSecret: envVars.JWT_ACCESS_SECRET as string,
   jwtRefreshSecret: envVars.JWT_REFRESH_SECRET as string,
+  appDomain: (envVars.APP_DOMAIN as string).replace(/\/$/, ''),
   uploadPath: path.resolve(envVars.UPLOAD_PATH as string),
   db: {
     host: envVars.DB_HOST as string,
@@ -62,12 +60,6 @@ export const env = {
   kafka: {
     clientId: envVars.KAFKA_CLIENT_ID as string,
     brokers: (envVars.KAFKA_BROKERS as string).split(','),
-    topic: envVars.KAFKA_TOPIC as string,
     groupId: envVars.KAFKA_GROUP_ID as string,
-  },
-  cloudinary: {
-    cloudName: envVars.CLOUDINARY_CLOUD_NAME as string,
-    apiKey: envVars.CLOUDINARY_API_KEY as string,
-    apiSecret: envVars.CLOUDINARY_API_SECRET as string,
   },
 };

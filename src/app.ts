@@ -23,6 +23,7 @@ export const createApp = (): Express => {
   // Routes
   app.use('/api/auth', container.authRouter);
   app.use('/api/vehicles', container.vehiclesRouter);
+  app.use('/api/rentals', container.rentalRouter);
 
   // Health check route
   app.get('/health', (_req, res) => {
