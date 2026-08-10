@@ -334,7 +334,7 @@
                               },
                               "photo_path": {
                                 "type": "string",
-                                "example": "https://res.cloudinary.com/demo/image/upload/sample.jpg"
+                                "example": "/uploads/vehicles/sample.jpg"
                               },
                               "created_at": {
                                 "type": "string",
@@ -448,7 +448,7 @@
       },
       "put": {
         "summary": "Update an existing vehicle",
-        "description": "Update vehicle fields and optionally upload a new photo to Cloudinary. Updates PostgreSQL, Redis, and OpenSearch.",
+        "description": "Update vehicle fields and optionally upload a new photo. Updates PostgreSQL, Redis, and OpenSearch.",
         "tags": [
           "Vehicles"
         ],
@@ -554,6 +554,114 @@
           },
           "404": {
             "description": "Vehicle not found"
+          }
+        }
+      }
+    },
+    "/rentals": {
+      "post": {
+        "summary": "Create a new rental booking",
+        "description": "Submits a rental booking request. Checks Redis availability slots, acquires Redis lock, and queues message into Kafka batch pipeline.",
+        "tags": [
+          "Rentals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vehicle_id",
+                  "customer_name",
+                  "customer_phone",
+                  "start_date",
+                  "end_date",
+                  "total_amount"
+                ],
+                "properties": {
+                  "vehicle_id": {
+                    "type": "integer",
+                    "example": 1
+                  },
+                  "customer_name": {
+                    "type": "string",
+                    "example": "John Doe"
+                  },
+                  "customer_phone": {
+                    "type": "string",
+                    "example": "+1234567890"
+                  },
+                  "start_date": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-08-15"
+                  },
+                  "end_date": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-08-20"
+                  },
+                  "total_amount": {
+                    "type": "number",
+                    "example": 250.00
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Rental booking submitted and queued successfully"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "404": {
+            "description": "Vehicle not found"
+          },
+          "409": {
+            "description": "Conflict - Vehicle slot is already booked or locked"
+          }
+        }
+      }
+    },
+    "/rentals/{id}": {
+      "get": {
+        "summary": "Fetch single rental details by ID",
+        "description": "Fetches single rental record by ID from PostgreSQL.",
+        "tags": [
+          "Rentals"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Rental ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rental details fetched successfully"
+          },
+          "400": {
+            "description": "Invalid rental ID parameter"
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid token"
+          },
+          "404": {
+            "description": "Rental not found"
           }
         }
       }

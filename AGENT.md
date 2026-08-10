@@ -11,42 +11,51 @@ You are tasked with building an enterprise-grade, highly scalable, and modular R
 - **Search & Filtering Engine:** OpenSearch for high-performance vehicle search by name and category filtering across large datasets
 - **Validation:** Joi
 - **Authentication & Security:** JSON Web Tokens (JWT), Bcrypt for password hashing, Express-Rate-Limit for auth routes
-- **File Management:** Multer for local photo storage
-- **Caching & High Concurrency:** Redis for caching and availability checks
-- **Messaging & Event-Driven:** Apache Kafka for asynchronous background workflows and event logging
+- **File Management:** Local filesystem (`fs`) image storage served via Express static middleware using configurable `APP_DOMAIN` and `UPLOAD_PATH`
+- **Caching & Distributed Locks:** Redis for session caching, vehicle list/details cache, date slot TTL reservations, and distributed mutex concurrency locks (`SET NX PX` + Lua script) for multi-container deployments
+- **Messaging & Event-Driven:** Apache Kafka for asynchronous background workflows, batch processing (`rental-batch-queue`), and Dead Letter Queue (`rental-dlq`) fault isolation
 - **Documentation:** Swagger / OpenAPI
 - **Quality Control:** ESLint and Prettier
 
 ## Architectural Patterns
 - **Modular Feature Architecture:** Each domain (`auth`, `vehicles`, `rentals`, `reports`) is self-contained under `src/modules/` with its own controller, service, repository, routes, interfaces, and validation schemas.
-- **Service Layer & OOP:** Business logic must reside entirely inside Service classes. Controllers only handle HTTP parsing, invocation, and response formatting.
-- **Repository Pattern:** Database data-fetching and custom SQL queries are isolated inside Repository classes.
-- **Transactional Integrity:** Knex database transactions must wrap critical operations (such as availability date-overlap checks and insert operations) to eliminate race conditions and double-bookings.
-- **Event-Driven Messaging:** Kafka producers and consumers (`src/kafka/`) handle asynchronous background jobs.
+- **Service Layer & OOP:** Business logic resides inside Service classes. Controllers only handle HTTP request parsing, invocation, and response formatting.
+- **Repository Pattern:** Database data-fetching and bulk SQL queries are isolated inside Repository classes.
+- **Distributed Concurrency Control:** Redis atomic distributed locking prevents concurrent booking requests across multi-container instances for target date slots.
+- **Transactional Integrity:** Knex database transactions wrap critical bulk operations for atomic commits.
+- **Event-Driven Messaging & Binary Split DLQ:** High-throughput Kafka batch consumer (`src/kafka/rental.handler.ts`) processes rentals (100 items / 2s window) with Binary Split Algorithm (divide & conquer) to isolate poisonous records into `rental-dlq` while bulk-committing valid records.
 
 # Redis, OpenSearch & Kafka Architecture
 
-## 1. Redis Caching & Session Strategy
+## 1. Redis Caching, Slots & Distributed Lock Strategy
 * **Staff Session Cache (Multi-device concurrent sessions)**
   * **Key Pattern:** `session:staff:{userId}:{deviceId}`
-  * **Function:** Caches active session payloads `{ deviceId, ip, deviceName, staff: { id, email, name } }` with a 7-day TTL (matching the Refresh Token expiry) to support concurrent multi-device logins and verify session state.
+  * **Function:** Caches active session payloads with a 7-day TTL matching Refresh Token expiry.
 
-* **Vehicle List Cache (Pagination)**
-  * **Key Pattern:** `vehicles:index` (and `vehicles:index:{category}`)
-  * **Function:** Stores an ordered Redis Sorted Set (ZSET) of vehicle IDs scored by timestamp to handle cursor pagination and sorting efficiently.
+* **Vehicle List & Details Cache**
+  * **Key Pattern:** `vehicles:index` (Sorted Set ZSET), `vehicles:index:{category}`, and `vehicle:{id}`
+  * **Function:** Enables fast cursor pagination and instant vehicle lookups.
 
-* **Vehicle Details Cache**
-  * **Key Pattern:** `vehicle:{id}`
-  * **Function:** Caches individual vehicle detail objects as JSON for instant lookups without hitting the database.
+* **Distributed Concurrency Lock**
+  * **Key Pattern:** `rental:lock:{vehicle_id}:{start_date}:{end_date}`
+  * **Function:** Uses atomic `SET NX PX` with UUID tokens and Lua script release to prevent concurrent booking collisions across multiple container instances for identical date ranges.
+
+* **Availability Slot Check & TTL**
+  * **Key Pattern:** `rental:slot:{vehicle_id}:{YYYY-MM-DD}`
+  * **Function:** Reserves date slots with calculated TTLs per day (midnight end + 24h buffer) so past date slot data automatically expires.
 
 ## 2. OpenSearch Strategy (Search & Filtering)
 * **Index Name:** `vehicles_index`
-* **Function:** Handles lightning-fast full-text search by vehicle name and category filtering for the vehicle fleet, bypassing heavy relational database lookups for search queries.
+* **Function:** Handles full-text search by vehicle name and category filtering.
 
-## 3. Kafka Event-Driven Strategy
-* **Topic:** `rental-events`
-* **Event Type:** `rental.created`
-* **Function:** Publishes a lightweight message upon successful booking creation, allowing background workers to handle asynchronous tasks (such as sending customer notifications and logging) without blocking the main API thread.
+## 3. Kafka Event-Driven & Batching Strategy
+* **Topics:**
+  * `rental-batch-queue`: Asynchronous rental ingestion queue.
+  * `rental-dlq`: Dead Letter Queue for corrupted/poisonous records.
+* **Batch Processing & Binary Split DLQ:**
+  * Accumulates payloads up to **100 items** or **2 seconds** window.
+  * Executes single-query bulk overlap checks (`findOverlappingRentalsBulk`) and in-memory intra-batch collision checks.
+  * Uses Binary Split Algorithm on failure to isolate poisonous records into `rental-dlq` while successfully committing valid batch items.
 
 ## Project File & Folder Structure
 ```text
@@ -63,34 +72,26 @@ src/
 │   ├── db.ts
 │   ├── env.ts
 │   ├── kafka.ts
-│   └── redis.ts
+│   ├── opensearch.ts
+│   ├── redis.ts
+│   └── swagger.ts
 ├── database/
 │   ├── migrations/
 │   └── seeds/
+├── docs/
+│   └── swagger.json
 ├── kafka/
-│   ├── handlers/
-│   │   └── rental_event.handler.ts
-│   └── worker.ts
+│   └── rental.handler.ts
 ├── middleware/
 │   ├── auth.middleware.ts
 │   ├── error.middleware.ts
-│   └── upload.middleware.ts
+│   ├── upload.middleware.ts
+│   └── validation.middleware.ts
 ├── modules/
 │   ├── auth/
-│   │   ├── auth.controller.ts
-│   │   ├── auth.interface.ts
-│   │   ├── auth.repository.ts
-│   │   ├── auth.routes.ts
-│   │   ├── auth.service.ts
-│   │   └── auth.validation.ts
 │   ├── vehicles/
-│   │   ├── vehicle.controller.ts
-│   │   ├── vehicle.interface.ts
-│   │   ├── vehicle.repository.ts
-│   │   ├── vehicle.routes.ts
-│   │   ├── vehicle.service.ts
-│   │   └── vehicle.validation.ts
 │   ├── rentals/
+│   │   ├── rental.cache.ts
 │   │   ├── rental.controller.ts
 │   │   ├── rental.interface.ts
 │   │   ├── rental.repository.ts
@@ -98,14 +99,12 @@ src/
 │   │   ├── rental.service.ts
 │   │   └── rental.validation.ts
 │   └── reports/
-│       ├── report.controller.ts
-│       ├── report.interface.ts
-│       ├── report.repository.ts
-│       ├── report.routes.ts
-│       └── report.service.ts
 ├── utils/
 │   ├── appError.ts
-│   └── sendResponse.ts
+│   ├── fileUpload.ts
+│   ├── sendResponse.ts
+│   └── uuid.ts
 ├── server.ts
 └── worker.ts
 tsconfig.json
+```

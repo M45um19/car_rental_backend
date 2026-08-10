@@ -10,6 +10,11 @@ import { VehiclesService } from './modules/vehicles/vehicles.service';
 import { VehiclesController } from './modules/vehicles/vehicles.controller';
 import { createVehiclesRouter } from './modules/vehicles/vehicles.routes';
 import { VehiclesCache } from './modules/vehicles/vehicles.cache';
+import { RentalRepository } from './modules/rentals/rental.repository';
+import { RentalCache } from './modules/rentals/rental.cache';
+import { RentalService } from './modules/rentals/rental.service';
+import { RentalController } from './modules/rentals/rental.controller';
+import { createRentalsRouter } from './modules/rentals/rental.routes';
 
 class AppContainer {
   private static instance: AppContainer;
@@ -26,6 +31,12 @@ class AppContainer {
   public vehiclesController: VehiclesController;
   public vehiclesRouter: Router;
 
+  public rentalRepository: RentalRepository;
+  public rentalCache: RentalCache;
+  public rentalService: RentalService;
+  public rentalController: RentalController;
+  public rentalRouter: Router;
+
   private constructor() {
     this.authRepository = new AuthRepository(db);
     this.authCache = new AuthCache();
@@ -38,6 +49,16 @@ class AppContainer {
     this.vehiclesService = new VehiclesService(this.vehiclesRepository, this.vehiclesCache);
     this.vehiclesController = new VehiclesController(this.vehiclesService);
     this.vehiclesRouter = createVehiclesRouter(this.vehiclesController);
+
+    this.rentalRepository = new RentalRepository(db);
+    this.rentalCache = new RentalCache();
+    this.rentalService = new RentalService(
+      this.rentalRepository,
+      this.rentalCache,
+      this.vehiclesRepository,
+    );
+    this.rentalController = new RentalController(this.rentalService);
+    this.rentalRouter = createRentalsRouter(this.rentalController);
   }
 
   public static getInstance(): AppContainer {
