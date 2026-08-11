@@ -33,11 +33,7 @@ export const createVehiclesRouter = (vehiclesController: VehiclesController): Ro
   );
 
   // DELETE /api/vehicles/:id (Staff only)
-  router.delete(
-    '/:id',
-    authenticate,
-    vehiclesController.deleteVehicle,
-  );
+  router.delete('/:id', authenticate, vehiclesController.deleteVehicle);
 
   return router;
 };

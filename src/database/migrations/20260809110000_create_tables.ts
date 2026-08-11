@@ -25,14 +25,22 @@ export async function up(knex: Knex): Promise<void> {
   // Create rentals table
   await knex.schema.createTable('rentals', (table) => {
     table.increments('id').primary();
-    table.integer('vehicle_id').unsigned().notNullable()
-      .references('id').inTable('vehicles').onDelete('CASCADE');
+    table
+      .integer('vehicle_id')
+      .unsigned()
+      .notNullable()
+      .references('id')
+      .inTable('vehicles')
+      .onDelete('CASCADE');
     table.string('customer_name').notNullable();
     table.string('customer_phone').notNullable();
     table.date('start_date').notNullable();
     table.date('end_date').notNullable();
     table.decimal('total_amount', 10, 2).notNullable();
-    table.enum('status', ['booked', 'ongoing', 'completed', 'cancelled']).notNullable().defaultTo('booked');
+    table
+      .enum('status', ['booked', 'ongoing', 'completed', 'cancelled'])
+      .notNullable()
+      .defaultTo('booked');
     table.timestamps(true, true);
 
     // Add indexes for optimization

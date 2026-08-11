@@ -25,7 +25,9 @@ const envSchema = Joi.object({
   KAFKA_CLIENT_ID: Joi.string().default('rental-service'),
   KAFKA_BROKERS: Joi.string().required(),
   KAFKA_GROUP_ID: Joi.string().default('rental-group'),
-}).unknown().required();
+})
+  .unknown()
+  .required();
 
 const { error, value: envVars } = envSchema.validate(process.env);
 

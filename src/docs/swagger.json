@@ -856,6 +856,52 @@
           }
         }
       }
+    },
+    "/reports/rentals": {
+      "get": {
+        "summary": "Get monthly rental reports",
+        "description": "Calculates per-vehicle booking counts, days rented, and revenue pro-rated for the requested month, and identifies the highest revenue vehicle.",
+        "tags": [
+          "Reports"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "description": "Report target month in YYYY-MM format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "2026-08"
+            }
+          },
+          {
+            "name": "vehicle_id",
+            "in": "query",
+            "description": "Optional vehicle ID filter",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rentals report fetched successfully"
+          },
+          "400": {
+            "description": "Invalid query parameters"
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid token"
+          }
+        }
+      }
     }
   }
 }

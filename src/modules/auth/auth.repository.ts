@@ -11,5 +11,4 @@ export class AuthRepository {
   public async findByEmail(email: string): Promise<IStaff | undefined> {
     return this.db<IStaff>('staff').where({ email }).first();
   }
-
 }

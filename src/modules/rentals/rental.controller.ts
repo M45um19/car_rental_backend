@@ -18,7 +18,11 @@ export class RentalController {
     }
   };
 
-  public getRentalsList = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  public getRentalsList = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
     try {
       const limit = req.query.limit ? Number(req.query.limit) : undefined;
       const cursor = req.query.cursor ? Number(req.query.cursor) : undefined;

@@ -103,10 +103,14 @@ export class RentalBatchProcessor {
         await this.rentalRepository.createBulk(trx, rentalsToInsert);
       });
 
-      console.log(`[RentalBatchProcessor] Successfully committed batch of ${items.length} rentals.`);
+      console.log(
+        `[RentalBatchProcessor] Successfully committed batch of ${items.length} rentals.`,
+      );
     } catch (error) {
       const errMessage = (error as Error).message || 'Bulk insert error';
-      console.warn(`[RentalBatchProcessor] Batch processing failed for ${items.length} item(s): ${errMessage}`);
+      console.warn(
+        `[RentalBatchProcessor] Batch processing failed for ${items.length} item(s): ${errMessage}`,
+      );
 
       if (items.length === 1) {
         // Single poisonous record isolated
@@ -121,7 +125,9 @@ export class RentalBatchProcessor {
         const leftHalf = items.slice(0, mid);
         const rightHalf = items.slice(mid);
 
-        console.log(`[RentalBatchProcessor] Executing binary split: left half (${leftHalf.length}), right half (${rightHalf.length})`);
+        console.log(
+          `[RentalBatchProcessor] Executing binary split: left half (${leftHalf.length}), right half (${rightHalf.length})`,
+        );
         await this.processBatchWithBinarySplit(leftHalf);
         await this.processBatchWithBinarySplit(rightHalf);
       }
