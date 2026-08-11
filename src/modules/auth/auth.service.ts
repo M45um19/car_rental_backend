@@ -38,11 +38,9 @@ export class AuthService {
     );
 
     // Generate Refresh Token (7 days expiry)
-    const refreshToken = jwt.sign(
-      { id: staff.id, deviceId },
-      env.jwtRefreshSecret,
-      { expiresIn: '7d' },
-    );
+    const refreshToken = jwt.sign({ id: staff.id, deviceId }, env.jwtRefreshSecret, {
+      expiresIn: '7d',
+    });
 
     // Store Session in Redis
     const sessionData = {
@@ -55,7 +53,7 @@ export class AuthService {
         name: staff.name,
       },
     };
-    
+
     try {
       await this.authCache.setSession(staff.id, deviceId, sessionData);
     } catch (redisErr) {

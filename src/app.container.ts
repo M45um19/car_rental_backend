@@ -15,6 +15,10 @@ import { RentalCache } from './modules/rentals/rental.cache';
 import { RentalService } from './modules/rentals/rental.service';
 import { RentalController } from './modules/rentals/rental.controller';
 import { createRentalsRouter } from './modules/rentals/rental.routes';
+import { ReportsRepository } from './modules/reports/reports.repository';
+import { ReportsService } from './modules/reports/reports.service';
+import { ReportsController } from './modules/reports/reports.controller';
+import { createReportsRouter } from './modules/reports/reports.routes';
 
 class AppContainer {
   private static instance: AppContainer;
@@ -36,6 +40,11 @@ class AppContainer {
   public rentalService: RentalService;
   public rentalController: RentalController;
   public rentalRouter: Router;
+
+  public reportsRepository: ReportsRepository;
+  public reportsService: ReportsService;
+  public reportsController: ReportsController;
+  public reportsRouter: Router;
 
   private constructor() {
     this.authRepository = new AuthRepository(db);
@@ -60,6 +69,11 @@ class AppContainer {
     );
     this.rentalController = new RentalController(this.rentalService);
     this.rentalRouter = createRentalsRouter(this.rentalController);
+
+    this.reportsRepository = new ReportsRepository(db);
+    this.reportsService = new ReportsService(this.reportsRepository);
+    this.reportsController = new ReportsController(this.reportsService);
+    this.reportsRouter = createReportsRouter(this.reportsController);
   }
 
   public static getInstance(): AppContainer {

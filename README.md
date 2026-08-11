@@ -253,8 +253,34 @@ Protected routes require JWT bearer token in header: `Authorization: Bearer <acc
   - **Action:** Deletes rental record from PostgreSQL and releases reserved Redis date slots (`rental:slot:{vehicle_id}:{date}`).
 
 ### Reports
-- `GET /api/reports/rentals?month=YYYY-MM&vehicle_id=123`
-  - **Parameters:** `month` (Required, format `YYYY-MM`), `vehicle_id` (Optional filter)
+- `GET /reports/rentals?month=YYYY-MM&vehicle_id=123` (or `/api/reports/rentals`) (Staff Only)
+  - **Query Parameters:** `month` (Required, format `YYYY-MM`), `vehicle_id` (Optional integer filter).
+  - **Description:** Generates monthly rental reports breaking down `total_bookings`, `days_rented`, and `revenue` per vehicle for the target month, along with identifying the `highest_revenue_vehicle`.
+  - **Pro-Rata Rule:** Only days and revenue falling strictly inside the requested month are counted (e.g. a rental running July 29–Aug 3 contributes 3 days to the August report, not 6).
+  - **Response Example:**
+    ```json
+    {
+      "success": true,
+      "message": "Rentals report fetched successfully",
+      "data": {
+        "month": "2026-08",
+        "vehicles": [
+          {
+            "id": 1,
+            "name": "Toyota Camry",
+            "total_bookings": 2,
+            "days_rented": 5,
+            "revenue": 250.0
+          }
+        ],
+        "highest_revenue_vehicle": {
+          "id": 1,
+          "name": "Toyota Camry",
+          "revenue": 250.0
+        }
+      }
+    }
+    ```
 
 ---
 
@@ -305,10 +331,12 @@ If a bulk insert fails due to database errors or date collisions:
 
 ### Pro-Rata Monthly Report Calculation
 
-When a rental crosses month boundaries (e.g., July 29 to August 3), the report calculates pro-rated occupancy and revenue within the requested month using:
-```sql
-GREATEST(0, (LEAST(end_date, :month_end) - GREATEST(start_date, :month_start)) + 1)
-```
+When a rental crosses month boundaries (e.g. July 29 to August 3), `ReportsService` calculates exact calendar day overlaps between `[start_date, end_date]` and `[month_start, month_end]` using UTC midnight dates:
+$$\text{effectiveStart} = \max(\text{start\_date}, \text{month\_start})$$
+$$\text{effectiveEnd} = \min(\text{end\_date}, \text{month\_end})$$
+$$\text{daysInMonth} = \max\left(0, \frac{\text{effectiveEnd} - \text{effectiveStart}}{86,400,000} + 1\right)$$
+Per-day rental rate is derived as $\frac{\text{total\_amount}}{\text{total\_rental\_days}}$, and revenue inside the target month is pro-rated as:
+$$\text{revenueInMonth} = \text{dailyRate} \times \text{daysInMonth}$$
 
 ---
 

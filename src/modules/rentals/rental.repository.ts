@@ -111,7 +111,10 @@ export class RentalRepository {
     }
 
     if (filters?.start_date && filters?.end_date) {
-      query = query.whereRaw('start_date <= ? AND end_date >= ?', [filters.end_date, filters.start_date]);
+      query = query.whereRaw('start_date <= ? AND end_date >= ?', [
+        filters.end_date,
+        filters.start_date,
+      ]);
     } else if (filters?.start_date) {
       query = query.where('start_date', '>=', filters.start_date);
     } else if (filters?.end_date) {

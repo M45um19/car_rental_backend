@@ -24,6 +24,8 @@ export const createApp = (): Express => {
   app.use('/api/auth', container.authRouter);
   app.use('/api/vehicles', container.vehiclesRouter);
   app.use('/api/rentals', container.rentalRouter);
+  app.use('/api/reports', container.reportsRouter);
+  app.use('/reports', container.reportsRouter);
 
   // Health check route
   app.get('/health', (_req, res) => {

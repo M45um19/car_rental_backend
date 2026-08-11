@@ -14,13 +14,10 @@ export const createRentalSchema = Joi.object({
     'string.empty': 'Customer phone cannot be empty',
     'any.required': 'Customer phone is required',
   }),
-  start_date: Joi.string()
-    .isoDate()
-    .required()
-    .messages({
-      'string.isoDate': 'Start date must be a valid ISO date string (YYYY-MM-DD)',
-      'any.required': 'Start date is required',
-    }),
+  start_date: Joi.string().isoDate().required().messages({
+    'string.isoDate': 'Start date must be a valid ISO date string (YYYY-MM-DD)',
+    'any.required': 'Start date is required',
+  }),
   end_date: Joi.string()
     .isoDate()
     .required()
