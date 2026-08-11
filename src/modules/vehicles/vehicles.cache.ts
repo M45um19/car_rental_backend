@@ -13,15 +13,15 @@ export class VehiclesCache {
 
   public async getManyVehicles(ids: number[]): Promise<(IVehicleResponse | null)[]> {
     if (ids.length === 0) return [];
-    const keys = ids.map(id => `vehicle:${id}`);
+    const keys = ids.map((id) => `vehicle:${id}`);
     const cachedData = await redisClient.mGet(keys);
-    return cachedData.map(val => (val ? JSON.parse(val) : null));
+    return cachedData.map((val) => (val ? JSON.parse(val) : null));
   }
 
   public async setManyVehicles(vehicles: IVehicleResponse[]): Promise<void> {
     if (vehicles.length === 0) return;
-    const promises = vehicles.map(v =>
-      redisClient.set(`vehicle:${v.id}`, JSON.stringify(v), { EX: 3600 })
+    const promises = vehicles.map((v) =>
+      redisClient.set(`vehicle:${v.id}`, JSON.stringify(v), { EX: 3600 }),
     );
     await Promise.all(promises);
   }
@@ -35,7 +35,10 @@ export class VehiclesCache {
     await redisClient.zAdd(key, { score, value: member });
   }
 
-  public async zAddManyIndex(key: string, items: { score: number; value: string }[]): Promise<void> {
+  public async zAddManyIndex(
+    key: string,
+    items: { score: number; value: string }[],
+  ): Promise<void> {
     await redisClient.zAdd(key, items);
   }
 

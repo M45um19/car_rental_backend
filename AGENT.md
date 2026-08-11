@@ -100,6 +100,12 @@ src/
 │   │   ├── rental.service.ts
 │   │   └── rental.validation.ts
 │   └── reports/
+│       ├── reports.controller.ts
+│       ├── reports.interface.ts
+│       ├── reports.repository.ts
+│       ├── reports.routes.ts
+│       ├── reports.service.ts
+│       └── reports.validation.ts
 ├── utils/
 │   ├── appError.ts
 │   ├── fileUpload.ts

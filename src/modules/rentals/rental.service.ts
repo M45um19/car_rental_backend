@@ -36,7 +36,11 @@ export class RentalService {
   /**
    * Helper function to calculate rental total amount from vehicle daily rate and date range.
    */
-  private calculateTotalAmount(dailyRate: number, startDateStr: string, endDateStr: string): number {
+  private calculateTotalAmount(
+    dailyRate: number,
+    startDateStr: string,
+    endDateStr: string,
+  ): number {
     const startMs = new Date(startDateStr).getTime();
     const endMs = new Date(endDateStr).getTime();
     const days = Math.max(1, Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24)) + 1);
@@ -167,8 +171,6 @@ export class RentalService {
         status: payload.status,
         message: 'Rental booking submitted and queued successfully',
       };
-    } catch (error) {
-      throw error;
     } finally {
       // Release distributed Redis lock
       if (lockToken) {
@@ -242,7 +244,12 @@ export class RentalService {
 
         if (!isAvailable) {
           // Re-reserve old slots if new range unavailable
-          await this.rentalCache.reserveSlots(existing.vehicle_id, oldStartDate, oldEndDate, id.toString());
+          await this.rentalCache.reserveSlots(
+            existing.vehicle_id,
+            oldStartDate,
+            oldEndDate,
+            id.toString(),
+          );
           throw new AppError(
             `Vehicle ${existing.vehicle_id} is already booked for the selected date range (${targetStartDate} to ${targetEndDate})`,
             409,
@@ -250,10 +257,20 @@ export class RentalService {
         }
 
         // Reserve new slots in Redis with TTL
-        await this.rentalCache.reserveSlots(existing.vehicle_id, targetStartDate, targetEndDate, id.toString());
+        await this.rentalCache.reserveSlots(
+          existing.vehicle_id,
+          targetStartDate,
+          targetEndDate,
+          id.toString(),
+        );
       } finally {
         if (lockToken) {
-          await this.rentalCache.releaseLock(existing.vehicle_id, targetStartDate, targetEndDate, lockToken);
+          await this.rentalCache.releaseLock(
+            existing.vehicle_id,
+            targetStartDate,
+            targetEndDate,
+            lockToken,
+          );
         }
       }
     }
@@ -284,8 +301,12 @@ export class RentalService {
       vehicle_id: updated.vehicle_id,
       customer_name: updated.customer_name,
       customer_phone: updated.customer_phone,
-      start_date: typeof updated.start_date === 'string' ? updated.start_date : updated.start_date.toISOString(),
-      end_date: typeof updated.end_date === 'string' ? updated.end_date : updated.end_date.toISOString(),
+      start_date:
+        typeof updated.start_date === 'string'
+          ? updated.start_date
+          : updated.start_date.toISOString(),
+      end_date:
+        typeof updated.end_date === 'string' ? updated.end_date : updated.end_date.toISOString(),
       total_amount: Number(updated.total_amount),
       status: updated.status,
       created_at: updated.created_at,
@@ -313,8 +334,10 @@ export class RentalService {
       vehicle_id: rental.vehicle_id,
       customer_name: rental.customer_name,
       customer_phone: rental.customer_phone,
-      start_date: typeof rental.start_date === 'string' ? rental.start_date : rental.start_date.toISOString(),
-      end_date: typeof rental.end_date === 'string' ? rental.end_date : rental.end_date.toISOString(),
+      start_date:
+        typeof rental.start_date === 'string' ? rental.start_date : rental.start_date.toISOString(),
+      end_date:
+        typeof rental.end_date === 'string' ? rental.end_date : rental.end_date.toISOString(),
       total_amount: Number(rental.total_amount),
       status: rental.status,
       created_at: rental.created_at,
@@ -349,8 +372,10 @@ export class RentalService {
       vehicle_id: rental.vehicle_id,
       customer_name: rental.customer_name,
       customer_phone: rental.customer_phone,
-      start_date: typeof rental.start_date === 'string' ? rental.start_date : rental.start_date.toISOString(),
-      end_date: typeof rental.end_date === 'string' ? rental.end_date : rental.end_date.toISOString(),
+      start_date:
+        typeof rental.start_date === 'string' ? rental.start_date : rental.start_date.toISOString(),
+      end_date:
+        typeof rental.end_date === 'string' ? rental.end_date : rental.end_date.toISOString(),
       total_amount: Number(rental.total_amount),
       status: rental.status,
       created_at: rental.created_at,

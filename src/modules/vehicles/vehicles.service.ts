@@ -71,7 +71,7 @@ export class VehiclesService {
     if (!exists) {
       const activeVehicles = await this.vehiclesRepository.findActiveIds(category);
       if (activeVehicles.length > 0) {
-        const scoreMembers = activeVehicles.map(v => ({
+        const scoreMembers = activeVehicles.map((v) => ({
           score: v.id,
           value: v.id.toString(),
         }));
@@ -127,7 +127,7 @@ export class VehiclesService {
       }
     }
 
-    return stitchedList.filter(item => item !== null);
+    return stitchedList.filter((item) => item !== null);
   }
 
   public async createVehicle(
@@ -302,8 +302,12 @@ export class VehiclesService {
       } catch (openSearchErr) {
         console.error('OpenSearch query failed, falling back to PostgreSQL:', openSearchErr);
         isFallback = true;
-        const dbVehicles = await this.vehiclesRepository.findPaginatedFromDb(fetchLimit, cursor, category);
-        fallbackVehicles = dbVehicles.map(v => ({
+        const dbVehicles = await this.vehiclesRepository.findPaginatedFromDb(
+          fetchLimit,
+          cursor,
+          category,
+        );
+        fallbackVehicles = dbVehicles.map((v) => ({
           id: v.id,
           name: v.name,
           plate_number: v.plate_number,
@@ -325,12 +329,16 @@ export class VehiclesService {
           zsetIds = await this.vehiclesCache.zRangeQuery(indexKey, '+inf', '-inf', fetchLimit);
         }
 
-        vehicleIds = zsetIds.map(id => Number(id));
+        vehicleIds = zsetIds.map((id) => Number(id));
       } catch (redisErr) {
         console.error('Redis ZSET query failed, falling back to PostgreSQL:', redisErr);
         isFallback = true;
-        const dbVehicles = await this.vehiclesRepository.findPaginatedFromDb(fetchLimit, cursor, category);
-        fallbackVehicles = dbVehicles.map(v => ({
+        const dbVehicles = await this.vehiclesRepository.findPaginatedFromDb(
+          fetchLimit,
+          cursor,
+          category,
+        );
+        fallbackVehicles = dbVehicles.map((v) => ({
           id: v.id,
           name: v.name,
           plate_number: v.plate_number,
@@ -372,7 +380,10 @@ export class VehiclesService {
       throw new AppError(`Vehicle with ID ${id} not found`, 404);
     }
 
-    if (payload.plate_number && payload.plate_number.toUpperCase() !== existingVehicle.plate_number) {
+    if (
+      payload.plate_number &&
+      payload.plate_number.toUpperCase() !== existingVehicle.plate_number
+    ) {
       const duplicate = await this.vehiclesRepository.findByPlateNumber(payload.plate_number);
       if (duplicate && duplicate.id !== id) {
         throw new AppError(`Vehicle with plate number ${payload.plate_number} already exists`, 409);
@@ -417,7 +428,10 @@ export class VehiclesService {
     try {
       await this.vehiclesCache.setVehicle(id, responseData);
 
-      if (payload.category && payload.category.toLowerCase() !== existingVehicle.category.toLowerCase()) {
+      if (
+        payload.category &&
+        payload.category.toLowerCase() !== existingVehicle.category.toLowerCase()
+      ) {
         const score = updatedVehicle.id;
         const oldCategoryKey = `vehicles:index:${existingVehicle.category.toLowerCase()}`;
         const newCategoryKey = `vehicles:index:${payload.category.toLowerCase()}`;

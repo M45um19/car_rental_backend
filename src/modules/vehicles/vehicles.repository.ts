@@ -10,24 +10,17 @@ export class VehiclesRepository {
   }
 
   public async findByPlateNumber(plateNumber: string): Promise<IVehicle | null> {
-    const vehicle = await this.db('vehicles')
-      .where('plate_number', plateNumber)
-      .first();
+    const vehicle = await this.db('vehicles').where('plate_number', plateNumber).first();
     return vehicle || null;
   }
 
   public async findById(id: number): Promise<IVehicle | null> {
-    const vehicle = await this.db('vehicles')
-      .where('id', id)
-      .andWhere('deleted_at', null)
-      .first();
+    const vehicle = await this.db('vehicles').where('id', id).andWhere('deleted_at', null).first();
     return vehicle || null;
   }
 
   public async findActiveIds(category?: string): Promise<{ id: number }[]> {
-    let query = this.db('vehicles')
-      .select('id')
-      .where('deleted_at', null);
+    let query = this.db('vehicles').select('id').where('deleted_at', null);
 
     if (category) {
       query = query.andWhere('category', category);
@@ -38,14 +31,15 @@ export class VehiclesRepository {
 
   public async findManyByIds(ids: number[]): Promise<IVehicle[]> {
     if (ids.length === 0) return [];
-    return this.db('vehicles')
-      .whereIn('id', ids)
-      .andWhere('deleted_at', null);
+    return this.db('vehicles').whereIn('id', ids).andWhere('deleted_at', null);
   }
 
-  public async findPaginatedFromDb(limit: number, cursor?: number, category?: string): Promise<IVehicle[]> {
-    let query = this.db('vehicles')
-      .where('deleted_at', null);
+  public async findPaginatedFromDb(
+    limit: number,
+    cursor?: number,
+    category?: string,
+  ): Promise<IVehicle[]> {
+    let query = this.db('vehicles').where('deleted_at', null);
 
     if (category) {
       query = query.andWhere('category', category);
@@ -87,12 +81,9 @@ export class VehiclesRepository {
   }
 
   public async softDelete(id: number): Promise<void> {
-    await this.db('vehicles')
-      .where('id', id)
-      .andWhere('deleted_at', null)
-      .update({
-        deleted_at: new Date(),
-        updated_at: new Date(),
-      });
+    await this.db('vehicles').where('id', id).andWhere('deleted_at', null).update({
+      deleted_at: new Date(),
+      updated_at: new Date(),
+    });
   }
 }
