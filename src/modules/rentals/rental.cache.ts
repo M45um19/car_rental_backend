@@ -103,6 +103,7 @@ export class RentalCache {
 
   /**
    * Reserves vehicle date slots in Redis with a calculated TTL per slot date.
+   * Value defaults to 'booked' ('1'). Presence of key indicates slot is reserved.
    */
   public async reserveSlots(
     vehicleId: number,
@@ -134,3 +135,5 @@ export class RentalCache {
     await redisClient.del(keys);
   }
 }
+
+

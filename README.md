@@ -17,18 +17,10 @@ The system is architected around Node.js, TypeScript, PostgreSQL (with Knex.js),
   - [Vehicles](#vehicles)
   - [Rentals](#rentals)
   - [Reports](#reports)
-- [Business Logic & Technical Decisions](#business-logic--technical-decisions)
-  - [Cache-First Vehicle Lookup & Automatic Rate Calculation](#cache-first-vehicle-lookup--automatic-rate-calculation)
-  - [Distributed Concurrency Lock & Redis Slots](#distributed-concurrency-lock--redis-slots)
-  - [Kafka Batch Processing & Single-Query Bulk Overlap Check](#kafka-batch-processing--single-query-bulk-overlap-check)
-  - [Binary Split DLQ Strategy](#binary-split-dlq-strategy)
-  - [Pro-Rata Monthly Report Calculation](#pro-rata-monthly-report-calculation)
+- [Redis & Kafka Strategy](#redis--kafka-strategy)
+  - [Redis Strategy](#redis-strategy)
+  - [Kafka Strategy](#kafka-strategy)
 - [Setup & Installation](#setup--installation)
-  - [Prerequisites](#prerequisites)
-  - [Environment Variables](#environment-variables)
-  - [Docker & External Services Setup](#docker--external-services-setup)
-  - [Database Migrations & Seeds](#database-migrations--seeds)
-  - [Running the Application](#running-the-application)
 - [Development & Quality Standards](#development--quality-standards)
 
 ---
@@ -43,11 +35,11 @@ The system is architected around Node.js, TypeScript, PostgreSQL (with Knex.js),
   - **Cache-First Vehicle Lookup:** Checks Redis `vehicle:{id}` cache first for vehicle details (`daily_rate`), falling back to DB and caching the result on cache miss.
   - **Automatic Backend `total_amount` Calculation:** Calculates `total_amount = daily_rate * duration_days` on the backend, omitting `total_amount` from client request bodies.
   - **Distributed Redis Lock:** Uses atomic `SET NX PX` with unique tokens and Lua script release to block concurrent booking collisions across multi-container deployments.
-  - **Redis Availability Slot & TTL Strategy:** Checks date slot keys (`rental:slot:{vehicle_id}:{YYYY-MM-DD}`). Applies calculated TTLs per day (midnight end + 24h buffer) for automatic eviction. Released on rental cancellation or deletion.
+  - **Redis Availability Slot & TTL Strategy:** Checks date slot keys (`rental:slot:{vehicle_id}:{YYYY-MM-DD}`). Applies calculated TTLs per day for automatic eviction. Released on rental cancellation or deletion.
   - **High-Throughput Kafka Batching:** Ingress queues rental requests to `rental-batch-queue`. Background consumer (`worker.ts`) flushes batches when reaching **100 items** OR a **2-second time window**.
   - **Single-Query Bulk Overlap Check:** Checks database collisions for all 100 batch items in 1 SQL query alongside in-memory intra-batch collision detection.
   - **Binary Split DLQ Strategy:** Recursively splits failing batches (divide & conquer) to isolate poisonous/corrupted records into `rental-dlq` while successfully committing all valid records in bulk.
-- **Pro-Rata Monthly Reporting:** Calculates occupancy metrics (total bookings, days rented, revenue) broken down per vehicle for a requested calendar month, ensuring cross-month rentals are pro-rated accurately.
+- **Monthly Reporting:** Generates occupancy metrics (total bookings, days rented, revenue) broken down per vehicle for a requested calendar month.
 
 ---
 
@@ -256,7 +248,6 @@ Protected routes require JWT bearer token in header: `Authorization: Bearer <acc
 - `GET /reports/rentals?month=YYYY-MM&vehicle_id=123` (or `/api/reports/rentals`) (Staff Only)
   - **Query Parameters:** `month` (Required, format `YYYY-MM`), `vehicle_id` (Optional integer filter).
   - **Description:** Generates monthly rental reports breaking down `total_bookings`, `days_rented`, and `revenue` per vehicle for the target month, along with identifying the `highest_revenue_vehicle`.
-  - **Pro-Rata Rule:** Only days and revenue falling strictly inside the requested month are counted (e.g. a rental running July 29–Aug 3 contributes 3 days to the August report, not 6).
   - **Response Example:**
     ```json
     {
@@ -284,149 +275,53 @@ Protected routes require JWT bearer token in header: `Authorization: Bearer <acc
 
 ---
 
-## Business Logic & Technical Decisions
+## Redis & Kafka Strategy
 
-### Cache-First Vehicle Lookup & Automatic Rate Calculation
+### Redis Strategy
 
-To optimize rental creation and update latency:
-1. **`RentalService` Checks Redis Cache First**: Looks up `vehicle:{id}` in Redis via `VehiclesCache.getVehicle(id)`.
-2. **Database Fallback & Cache Hydration**: On a cache miss, queries PostgreSQL `vehicles` table and populates `vehicle:{id}` in Redis with a 1-hour TTL.
-3. **Server-Side Total Calculation**: Calculates duration days:
-   $$\text{Days} = \max\left(1, \left\lceil \frac{\text{end\_date} - \text{start\_date}}{86,400,000} \right\rceil + 1\right)$$
-   Sets `total_amount = daily_rate * Days` automatically on the backend, protecting against client-side price tampering.
-
----
-
-### Distributed Concurrency Lock & Redis Slots
-
-For horizontal scalability across multi-container deployments:
-1. **Distributed Lock (`RentalCache.acquireLock`)**:
+1. **Distributed Concurrency Lock (`RentalCache.acquireLock`)**:
    - Executes atomic `SET rental:lock:{vehicle_id}:{start_date}:{end_date} <token> NX PX 5000`.
    - Prevents parallel booking requests across microservice instances for the same vehicle and date range.
    - Released atomically via Lua script (`eval`) verifying token ownership.
-2. **Date Slot Reservation (`RentalCache.reserveSlots`)**:
+2. **Date Slot Reservation & TTL (`RentalCache.reserveSlots`)**:
    - Key format: `rental:slot:{vehicle_id}:{YYYY-MM-DD}`.
    - Calculates TTL per date (`targetDateEnd - now + 24h buffer`) ensuring past slots automatically evict from Redis.
    - Released on cancellation or deletion via `RentalCache.releaseSlots`.
+3. **Vehicle Details Caching (`VehiclesCache.getVehicle`)**:
+   - Stores `vehicle:{id}` JSON strings in Redis with a 1-hour TTL to accelerate rate lookup during rental creation.
 
 ---
 
-### Kafka Batch Processing & Single-Query Bulk Overlap Check
+### Kafka Strategy
 
-Background worker (`src/kafka/rental.handler.ts`) buffers incoming messages and flushes when reaching **100 items** OR **2 seconds** window:
-1. **Intra-Batch Collision Check:** Evaluates whether two requests inside the same batch overlap with each other in memory.
-2. **Single-Query Bulk DB Overlap Check (`findOverlappingRentalsBulk`)**:
-   - Executes 1 SQL `SELECT` query with `OR` clauses across all 100 items instead of 100 separate queries in a loop, reducing DB latency by 99%.
-
----
-
-### Binary Split DLQ Strategy
-
-If a bulk insert fails due to database errors or date collisions:
-- The `RentalBatchProcessor` recursively splits the failing batch in half (divide & conquer).
-- Non-colliding sub-batches succeed and commit in bulk.
-- Single poisonous records are isolated and routed to the Kafka Dead Letter Queue topic (`rental-dlq`), ensuring valid batch items are never dropped.
-
----
-
-### Pro-Rata Monthly Report Calculation
-
-When a rental crosses month boundaries (e.g. July 29 to August 3), `ReportsService` calculates exact calendar day overlaps between `[start_date, end_date]` and `[month_start, month_end]` using UTC midnight dates:
-$$\text{effectiveStart} = \max(\text{start\_date}, \text{month\_start})$$
-$$\text{effectiveEnd} = \min(\text{end\_date}, \text{month\_end})$$
-$$\text{daysInMonth} = \max\left(0, \frac{\text{effectiveEnd} - \text{effectiveStart}}{86,400,000} + 1\right)$$
-Per-day rental rate is derived as $\frac{\text{total\_amount}}{\text{total\_rental\_days}}$, and revenue inside the target month is pro-rated as:
-$$\text{revenueInMonth} = \text{dailyRate} \times \text{daysInMonth}$$
+1. **High-Throughput Batch Processing**:
+   - Asynchronous ingress queues rental requests to Kafka topic `rental-batch-queue`.
+   - Background consumer worker flushes batches when reaching **100 items** OR a **2-second time window**.
+2. **Single-Query Bulk Overlap Check**:
+   - Performs in-memory intra-batch collision checks across incoming batch items.
+   - Executes 1 SQL `SELECT` query with `OR` clauses across all 100 items instead of 100 separate database queries.
+3. **Binary Split DLQ Strategy**:
+   - If a bulk transaction fails due to database errors or date collisions, the handler recursively splits the failing batch (divide & conquer).
+   - Non-colliding sub-batches succeed and commit in bulk.
+   - Single poisonous or corrupted records are isolated and routed to `rental-dlq` topic.
 
 ---
 
 ## Setup & Installation
 
-### Prerequisites
-- Node.js (v20 or higher)
-- Docker & Docker Compose (Recommended)
-
-### Environment Variables
-
-Copy `.env.example` to `.env`:
-```bash
-cp .env.example .env
-```
-
-Configure `.env`:
-```env
-# Server Config
-PORT=3000
-NODE_ENV=development
-JWT_ACCESS_SECRET=your_access_token_secret_key
-JWT_REFRESH_SECRET=your_refresh_token_secret_key
-APP_DOMAIN=http://localhost:3000
-UPLOAD_PATH=uploads/
-
-# Database Config (PostgreSQL)
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=vehicle_rental_db
-DB_POOL_MIN=2
-DB_POOL_MAX=10
-
-# Redis Cache Config
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-REDIS_PASSWORD=
-
-# OpenSearch Config
-OPENSEARCH_NODE=http://127.0.0.1:9200
-OPENSEARCH_USER=admin
-OPENSEARCH_PASSWORD=admin
-
-# Kafka Broker Config
-KAFKA_CLIENT_ID=rental-service
-KAFKA_BROKERS=127.0.0.1:9092
-KAFKA_GROUP_ID=rental-group
-```
-
----
-
-### Docker & External Services Setup
-
-Start containers using Docker Compose:
-```bash
-docker compose up --build -d
-```
-
----
-
-### Database Migrations & Seeds
-
-1. **Run Migrations:**
+1. **Configure Environment Variables:**
+   Copy `.env.example` to create `.env` and configure your environment variables:
    ```bash
-   npm run db:migrate
-   ```
-2. **Seed Database:**
-   ```bash
-   npm run db:seed
+   cp .env.example .env
    ```
 
----
+2. **Run Docker Compose:**
+   Build and start all services using Docker Compose:
+   ```bash
+   docker compose up --build
+   ```
 
-### Running the Application
-
-```bash
-# Install Dependencies
-npm install
-
-# Run HTTP API Server and Kafka Worker Concurrently
-npm run dev
-
-# Run Production Build
-npm run build
-npm start
-```
-
-#### Web Interfaces & Management UIs
+### Web Interfaces
 - **Swagger OpenAPI Docs:** `http://localhost:3000/docs`
 - **RedisInsight Web UI:** `http://localhost:5540`
 

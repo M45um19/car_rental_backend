@@ -1,6 +1,7 @@
 import { db } from '../config/db';
 import { RentalRepository } from '../modules/rentals/rental.repository';
 import { IRentalPayload } from '../modules/rentals/rental.interface';
+import { RentalCache } from '../modules/rentals/rental.cache';
 import { getKafkaProducer } from '../config/kafka';
 
 export class RentalBatchProcessor {
@@ -9,9 +10,11 @@ export class RentalBatchProcessor {
   private maxBatchSize = 100;
   private maxWaitMs = 2000;
   private rentalRepository: RentalRepository;
+  private rentalCache?: RentalCache;
 
-  constructor(rentalRepository: RentalRepository) {
+  constructor(rentalRepository: RentalRepository, rentalCache?: RentalCache) {
     this.rentalRepository = rentalRepository;
+    this.rentalCache = rentalCache;
   }
 
   /**
@@ -135,13 +138,27 @@ export class RentalBatchProcessor {
   }
 
   /**
+   * Directly processes a batch of rental payloads from Kafka consumer eachBatch.
+   * Runs binary split DB transactions and routes poisonous records to DLQ before resolving offsets.
+   */
+  public async processDirectBatch(items: IRentalPayload[]): Promise<void> {
+    await this.processBatchWithBinarySplit(items);
+  }
+
+  /**
    * Routes a failed/corrupted rental payload to the Dead Letter Queue (rental-dlq) topic.
    */
   private async sendToDLQ(item: IRentalPayload, reason: string): Promise<void> {
     try {
+      // Release Redis slots for poisonous/failed record
+      if (this.rentalCache) {
+        await this.rentalCache.releaseSlots(item.vehicle_id, item.start_date, item.end_date);
+      }
+
       const producer = getKafkaProducer();
       await producer.send({
         topic: 'rental-dlq',
+        acks: -1,
         messages: [
           {
             key: item.vehicle_id.toString(),
@@ -158,3 +175,4 @@ export class RentalBatchProcessor {
     }
   }
 }
+
