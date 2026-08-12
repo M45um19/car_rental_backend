@@ -27,7 +27,7 @@ The system is architected around Node.js, TypeScript, PostgreSQL (with Knex.js),
 
 ## Features
 
-- **Authentication & Security:** Multi-device staff login with Bcrypt password hashing, dual JWT tokens (Access Token & Refresh Token), RFC-compliant UUIDv7 `deviceId`, and active session tracking in Redis.
+- **Authentication & Security:** Multi-device staff login with Bcrypt password hashing, dual JWT tokens (Access Token & Refresh Token), RFC-compliant UUIDv7 `deviceId`, active session tracking in Redis, and Redis-backed IP rate limiting on login.
 - **Vehicle Fleet Management:** CRUD operations for vehicles with multipart form-data photo uploads saved locally to disk (`uploads/vehicles/`) and returned with fully-qualified domain URLs (`APP_DOMAIN`). Soft deletion (`deleted_at`) preserves relational integrity.
 - **Cursor Pagination:** `GET /vehicles` and `GET /rentals` implement lightweight, fast keyset cursor pagination returning `nextCursor` in response payloads.
 - **Advanced Search & Filtering:** Vehicle search by name, category, and plate number is accelerated using **OpenSearch** to offload database search queries.
@@ -130,6 +130,7 @@ src/
 ├── middleware/               # Common HTTP Middlewares
 │   ├── auth.middleware.ts    # JWT verification & Redis session check
 │   ├── error.middleware.ts   # Global error handling
+│   ├── rateLimitter.middleware.ts # Redis-backed IP rate limiting middleware
 │   ├── upload.middleware.ts  # Multer memory storage middleware
 │   └── validation.middleware.ts # Joi request body validator
 ├── modules/                  # Modular Feature Domains
@@ -195,6 +196,7 @@ Protected routes require JWT bearer token in header: `Authorization: Bearer <acc
 
 ### Authentication
 - `POST /api/auth/login`
+  - **Rate Limit:** 5 requests per 15-minute window per IP (backed by Redis)
   - **Body:** `{ email, password, deviceName }` (`deviceName` optional)
   - **Response:** `{ accessToken, refreshToken, deviceId, staff: { id, email, name } }`
 
@@ -289,6 +291,9 @@ Protected routes require JWT bearer token in header: `Authorization: Bearer <acc
    - Released on cancellation or deletion via `RentalCache.releaseSlots`.
 3. **Vehicle Details Caching (`VehiclesCache.getVehicle`)**:
    - Stores `vehicle:{id}` JSON strings in Redis with a 1-hour TTL to accelerate rate lookup during rental creation.
+4. **IP Rate Limiting (`rateLimitter.middleware.ts`)**:
+   - Key format: `rl:login:{IP}`.
+   - Restricts repeated authentication attempts (5 requests per 15 minutes) using Redis `INCR`, `EXPIRE`, and TTL tracking with graceful fallback.
 
 ---
 

@@ -10,7 +10,7 @@ You are tasked with building an enterprise-grade, highly scalable, and modular R
 - **Database & Query Builder:** PostgreSQL managed via Knex.js (using connection pools, migrations, and raw SQL/advanced query builders for core transactional data and reporting)
 - **Search & Filtering Engine:** OpenSearch for high-performance vehicle search by name and category filtering across large datasets
 - **Validation:** Joi
-- **Authentication & Security:** JSON Web Tokens (JWT), Bcrypt for password hashing, Express-Rate-Limit for auth routes
+- **Authentication & Security:** JSON Web Tokens (JWT), Bcrypt for password hashing, Redis-backed rate limiting (`rateLimitter.middleware.ts`) for auth routes
 - **File Management:** Local filesystem (`fs`) image storage served via Express static middleware using configurable `APP_DOMAIN` and `UPLOAD_PATH`
 - **Caching & Distributed Locks:** Redis for session caching, vehicle list/details cache (`vehicle:{id}`), date slot TTL reservations (`rental:slot:{vehicle_id}:{YYYY-MM-DD}`), and distributed mutex concurrency locks (`SET NX PX` + Lua script) for multi-container deployments
 - **Messaging & Event-Driven:** Apache Kafka for asynchronous background workflows, batch processing (`rental-batch-queue`), and Dead Letter Queue (`rental-dlq`) fault isolation
@@ -44,6 +44,10 @@ You are tasked with building an enterprise-grade, highly scalable, and modular R
 * **Availability Slot Check & TTL**
   * **Key Pattern:** `rental:slot:{vehicle_id}:{YYYY-MM-DD}`
   * **Function:** Reserves date slots with calculated TTLs per day (midnight end + 24h buffer) so past date slot data automatically expires. Released on rental deletion or cancellation.
+
+* **IP Rate Limiting**
+  * **Key Pattern:** `rl:login:{IP}`
+  * **Function:** Tracks IP request counts with atomic Redis `INCR` and window TTLs to protect auth routes against brute-force attempts with graceful fallback.
 
 ## 2. OpenSearch Strategy (Search & Filtering)
 * **Index Name:** `vehicles_index`
@@ -86,6 +90,7 @@ src/
 ├── middleware/
 │   ├── auth.middleware.ts
 │   ├── error.middleware.ts
+│   ├── rateLimitter.middleware.ts
 │   ├── upload.middleware.ts
 │   └── validation.middleware.ts
 ├── modules/
