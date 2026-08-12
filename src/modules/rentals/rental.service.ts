@@ -133,7 +133,7 @@ export class RentalService {
         request.vehicle_id,
         request.start_date,
         request.end_date,
-        requestId,
+        'booked',
       );
 
       // 4. Construct Kafka event payload
@@ -149,17 +149,31 @@ export class RentalService {
         createdAt: new Date().toISOString(),
       };
 
-      // 5. Dispatch payload to Kafka topic 'rental-batch-queue'
-      const producer = getKafkaProducer();
-      await producer.send({
-        topic: 'rental-batch-queue',
-        messages: [
-          {
-            key: request.vehicle_id.toString(),
-            value: JSON.stringify(payload),
-          },
-        ],
-      });
+      try {
+        // 5. Dispatch payload to Kafka topic 'rental-batch-queue' with acks: -1 (all ISR replicas)
+        const producer = getKafkaProducer();
+        await producer.send({
+          topic: 'rental-batch-queue',
+          acks: -1,
+          messages: [
+            {
+              key: request.vehicle_id.toString(),
+              value: JSON.stringify(payload),
+            },
+          ],
+        });
+      } catch (kafkaErr) {
+        // Rollback reserved Redis date slots if Kafka dispatch fails
+        await this.rentalCache.releaseSlots(
+          request.vehicle_id,
+          request.start_date,
+          request.end_date,
+        );
+        throw new AppError(
+          `Failed to queue rental booking to Kafka: ${(kafkaErr as Error).message}`,
+          500,
+        );
+      }
 
       return {
         vehicle_id: payload.vehicle_id,
@@ -248,7 +262,7 @@ export class RentalService {
             existing.vehicle_id,
             oldStartDate,
             oldEndDate,
-            id.toString(),
+            'booked',
           );
           throw new AppError(
             `Vehicle ${existing.vehicle_id} is already booked for the selected date range (${targetStartDate} to ${targetEndDate})`,
@@ -261,7 +275,7 @@ export class RentalService {
           existing.vehicle_id,
           targetStartDate,
           targetEndDate,
-          id.toString(),
+          'booked',
         );
       } finally {
         if (lockToken) {
